@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>TaskFlow — Recordatorios y Tareas</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // === CONFIGURA AQUÍ TU PROYECTO DE SUPABASE ===
+  // Los encuentras en: Supabase → Project Settings → API
+  window.SUPABASE_URL = "https://usnkofcilxqcxaoljdeo.supabase.co";
+  window.SUPABASE_ANON_KEY = "sb_publishable_FGILkRsU-oSmfTNNF8r0Zg_Gnhdrc_N";
+</script>
+<script id="tailwind-config">
+tailwind.config = { darkMode: "class", theme: { extend: { colors: {
+  "surface-container": "#e5eeff", "primary-container": "#4f46e5", "on-secondary-container": "#5c2400",
+  "tertiary": "#684000", "secondary-container": "#fd761a", "on-surface-variant": "#464555",
+  "primary-fixed-dim": "#c3c0ff", "inverse-surface": "#213145", "surface-container-lowest": "#ffffff",
+  "secondary-fixed": "#ffdbca", "inverse-primary": "#c3c0ff", "tertiary-fixed-dim": "#ffb95f",
+  "primary-fixed": "#e2dfff", "surface-bright": "#f8f9ff", "on-primary": "#ffffff",
+  "outline-variant": "#c7c4d8", "secondary-fixed-dim": "#ffb690", "outline": "#777587",
+  "surface-dim": "#cbdbf5", "surface-tint": "#4d44e3", "tertiary-fixed": "#ffddb8",
+  "on-primary-fixed-variant": "#3323cc", "on-secondary-fixed": "#341100", "on-tertiary-fixed": "#2a1700",
+  "surface-container-low": "#eff4ff", "on-tertiary": "#ffffff", "on-primary-fixed": "#0f0069",
+  "on-background": "#0b1c30", "on-secondary": "#ffffff", "tertiary-container": "#885500",
+  "surface-variant": "#d3e4fe", "on-tertiary-container": "#ffd4a4", "on-primary-container": "#dad7ff",
+  "on-error-container": "#93000a", "error-container": "#ffdad6", "on-secondary-fixed-variant": "#783200",
+  "surface-container-high": "#dce9ff", "background": "#f8f9ff", "surface": "#f8f9ff",
+  "secondary": "#9d4300", "on-tertiary-fixed-variant": "#653e00", "error": "#ba1a1a",
+  "inverse-on-surface": "#eaf1ff", "surface-container-highest": "#d3e4fe", "on-error": "#ffffff",
+  "primary": "#3525cd", "on-surface": "#0b1c30"
+}, borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+spacing: { "space-2xs": "0.25rem", "gutter-mobile": "1rem", "margin-tablet": "2rem", "space-xs": "0.5rem",
+  "margin-mobile": "1.25rem", "gutter-tablet": "1.5rem", "space-lg": "1.25rem", "space-xl": "1.5rem",
+  "space-2xl": "2rem", "space-md": "1rem", "space-3xl": "3rem", "space-sm": "0.75rem" },
+fontFamily: { "headline-md": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"],
+  "label-md": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "display-lg-mobile": ["Plus Jakarta Sans"],
+  "display-lg": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"],
+  "headline-sm": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"] },
+fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015em", fontWeight: "700" }],
+  "body-md": ["14px", { lineHeight: "20px", letterSpacing: "0em", fontWeight: "400" }],
+  "headline-lg": ["24px", { lineHeight: "32px", letterSpacing: "-0.02em", fontWeight: "700" }],
+  "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "600" }],
+  "body-lg": ["16px", { lineHeight: "24px", letterSpacing: "-0.005em", fontWeight: "400" }],
+  "display-lg-mobile": ["28px", { lineHeight: "34px", letterSpacing: "-0.025em", fontWeight: "800" }],
+  "display-lg": ["36px", { lineHeight: "44px", letterSpacing: "-0.03em", fontWeight: "800" }],
+  "body-sm": ["13px", { lineHeight: "18px", letterSpacing: "0em", fontWeight: "400" }],
+  "label-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }],
+  "headline-sm": ["18px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" }],
+  "label-sm": ["11px", { lineHeight: "14px", letterSpacing: "0.04em", fontWeight: "700" }] } } } };
+</script>
+<style>
+  @layer base {
+    html, body { width: 100vw; margin: 0; padding: 0; }
+    body { overscroll-behavior-y: none; min-height: 100dvh; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  }
+  ::-webkit-scrollbar { display: none; }
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .view { display: none; }
+  .view.active { display: flex; }
+  .modal-backdrop { display: none; }
+  .modal-backdrop.active { display: flex; }
+  .fade-in { animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px);} to { opacity:1; transform:translateY(0);} }
+  .toast { animation: toastIn .25s ease, toastOut .25s ease 2.6s forwards; }
+  @keyframes toastIn { from { opacity:0; transform: translate(-50%, 12px);} to { opacity:1; transform: translate(-50%,0);} }
+  @keyframes toastOut { to { opacity:0; transform: translate(-50%, 12px);} }
+  input[type="checkbox"].task-check { appearance:none; -webkit-appearance:none; }
+  .switch[data-on="true"] { background-color:#3525cd; }
+  .switch[data-on="true"] .knob { transform: translateX(20px); }
+  .switch { background-color:#d3e4fe; transition:background-color .15s ease; }
+  .knob { transition: transform .15s ease; }
+  .strike { text-decoration: line-through; opacity:.5; }
+  .auth-tab { color: #464555; }
+  .auth-tab.active { background:#ffffff; color:#3525cd; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .animate-spin { animation: spin 0.8s linear infinite; }
+</style>
+</head>
+<body class="bg-surface text-on-surface font-body-md flex flex-col min-h-screen">
+
+<!-- AUTH SCREEN (login / registro) -->
+<div id="auth-screen" class="fixed inset-0 z-[100] bg-surface flex flex-col items-center justify-center px-margin-mobile">
+  <div class="w-full max-w-sm flex flex-col gap-space-lg">
+    <div class="flex flex-col items-center gap-space-xs">
+      <div class="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center text-on-primary shadow-md">
+        <span class="material-symbols-outlined text-[28px]">bolt</span>
+      </div>
+      <h1 class="font-headline-lg text-headline-lg text-on-surface">TaskFlow</h1>
+      <p class="font-body-sm text-body-sm text-on-surface-variant text-center">Tus tareas, sincronizadas en la nube</p>
+    </div>
+
+    <div class="flex bg-surface-container-low rounded-xl p-1">
+      <button id="auth-tab-login" class="auth-tab flex-1 py-2.5 rounded-lg font-label-lg text-label-lg transition-colors">Iniciar sesión</button>
+      <button id="auth-tab-signup" class="auth-tab flex-1 py-2.5 rounded-lg font-label-lg text-label-lg transition-colors">Crear cuenta</button>
+    </div>
+
+    <form id="auth-form" class="flex flex-col gap-space-sm">
+      <div class="flex flex-col gap-1">
+        <label class="font-label-md text-label-md text-on-surface-variant">Correo</label>
+        <input required type="email" id="auth-email" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md" placeholder="tucorreo@ejemplo.com"/>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="font-label-md text-label-md text-on-surface-variant">Contraseña</label>
+        <input required type="password" id="auth-password" minlength="6" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md" placeholder="Mínimo 6 caracteres"/>
+      </div>
+      <p id="auth-error" class="hidden font-body-sm text-body-sm text-error px-1"></p>
+      <p id="auth-info" class="hidden font-body-sm text-body-sm text-primary px-1"></p>
+      <button type="submit" id="auth-submit-btn" class="mt-2 py-3 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-2">
+        <span id="auth-submit-label">Entrar</span>
+        <span id="auth-spinner" class="hidden material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+      </button>
+    </form>
+    <p id="auth-config-warning" class="hidden font-body-sm text-body-sm text-error text-center bg-error-container/40 rounded-xl p-space-sm">
+      ⚠️ Configura SUPABASE_URL y SUPABASE_ANON_KEY en el &lt;head&gt; del archivo para poder usar la app.
+    </p>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="fixed top-0 w-full z-50 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+  <div class="h-16 px-gutter-mobile flex items-center justify-between max-w-3xl mx-auto">
+    <div class="flex items-center gap-space-xs">
+      <div class="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-on-primary shadow-sm">
+        <span class="material-symbols-outlined text-[20px]">bolt</span>
+      </div>
+      <div class="flex flex-col">
+        <span class="font-headline-sm text-headline-sm text-on-surface tracking-tight leading-none">TaskFlow</span>
+        <span class="font-label-sm text-label-sm text-on-surface-variant" id="header-subtitle">Tareas</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-space-xs">
+      <button aria-label="Notificaciones" id="btn-open-notifs" class="relative w-11 h-11 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors">
+        <span class="material-symbols-outlined text-[24px]">notifications</span>
+        <span id="notif-badge" class="hidden absolute top-1.5 right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-secondary-container text-white font-label-sm text-[10px] font-bold rounded-full shadow-sm ring-2 ring-surface">0</span>
+      </button>
+      <button aria-label="Perfil" id="btn-open-ajustes-header" class="w-10 h-10 rounded-full flex items-center justify-center bg-primary-fixed text-on-primary-fixed font-bold text-sm ring-2 ring-primary/10">
+        <span id="profile-initial">S</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="flex flex-col relative w-full pt-16 pb-40 px-margin-mobile bg-surface min-h-screen max-w-3xl mx-auto">
+<!-- VIEW: TAREAS -->
+<section id="view-tareas" class="view flex-col gap-space-xl w-full active">
+  <div class="flex flex-col gap-space-xs pt-space-xs">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="font-display-lg-mobile text-display-lg-mobile text-on-surface tracking-tight" id="greeting-text">¡Hola! 👋</h1>
+        <p class="font-body-md text-body-md text-on-surface-variant" id="pending-count-text">Tienes 0 tareas pendientes para hoy</p>
+      </div>
+      <div class="flex flex-col items-center justify-center bg-surface-container-high px-space-sm py-space-xs rounded-xl shadow-sm">
+        <span class="font-label-sm text-label-sm text-primary uppercase tracking-wider font-bold">Progreso</span>
+        <span class="font-headline-md text-headline-md text-on-surface font-extrabold" id="progress-pct">0%</span>
+      </div>
+    </div>
+    <div id="filter-pills" class="flex items-center gap-space-xs overflow-x-auto py-space-xs -mx-margin-mobile px-margin-mobile no-scrollbar"></div>
+  </div>
+
+  <!-- Pinned task -->
+  <section id="pinned-section" class="flex flex-col gap-space-xs hidden">
+    <div class="flex items-center justify-between px-space-2xs">
+      <div class="flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-secondary text-[20px]" style="font-variation-settings: 'FILL' 1;">push_pin</span>
+        <h2 class="font-label-lg text-label-lg text-on-surface uppercase tracking-wider font-bold">Fijado</h2>
+      </div>
+    </div>
+    <div id="pinned-card" class="relative overflow-hidden bg-gradient-to-br from-surface-container-lowest via-surface-container-lowest to-surface-container p-space-lg rounded-xl shadow-md"></div>
+  </section>
+
+  <!-- Task list -->
+  <section class="flex flex-col gap-space-md">
+    <div class="flex items-center justify-between px-space-2xs">
+      <h2 class="font-label-lg text-label-lg text-on-surface uppercase tracking-wider font-bold">Todas las tareas</h2>
+      <button id="btn-add-task-inline" class="flex items-center gap-1 text-primary font-label-md text-label-md">
+        <span class="material-symbols-outlined text-[18px]">add_circle</span> Nueva
+      </button>
+    </div>
+    <div id="task-list" class="flex flex-col gap-space-sm"></div>
+    <div id="task-empty" class="hidden flex flex-col items-center justify-center gap-2 py-space-3xl text-center">
+      <span class="material-symbols-outlined text-[40px] text-outline">task_alt</span>
+      <p class="font-body-md text-body-md text-on-surface-variant">No tienes tareas todavía.<br/>Crea la primera con el botón "Nueva".</p>
+    </div>
+  </section>
+</section>
+<!-- VIEW: MATERIAS -->
+<section id="view-materias" class="view flex-col gap-space-lg w-full">
+  <div class="flex flex-col gap-space-sm pt-space-xs">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider">Plan Académico</p>
+        <h1 class="font-headline-lg text-headline-lg text-on-surface">Mis Materias</h1>
+      </div>
+      <button id="btn-add-subject" class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-on-primary font-label-md text-label-md shadow-sm active:scale-95 transition-transform duration-150">
+        <span class="material-symbols-outlined text-[18px]">add_circle</span>
+        <span>Nueva Materia</span>
+      </button>
+    </div>
+    <div class="relative w-full flex items-center">
+      <span class="material-symbols-outlined absolute left-3 text-on-surface-variant text-[20px] pointer-events-none">search</span>
+      <input id="subject-search" class="w-full h-11 pl-10 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest shadow-sm transition-colors" placeholder="Buscar materia o profesor..." type="text"/>
+    </div>
+  </div>
+  <div id="subjects-list" class="flex flex-col gap-space-md"></div>
+  <div id="subjects-empty" class="hidden flex flex-col items-center justify-center gap-2 py-space-3xl text-center">
+    <span class="material-symbols-outlined text-[40px] text-outline">folder_open</span>
+    <p class="font-body-md text-body-md text-on-surface-variant">Aún no agregas materias.<br/>Crea la primera para organizar tus tareas.</p>
+  </div>
+</section>
+<!-- VIEW: CALENDARIO -->
+<section id="view-calendario" class="view flex-col gap-space-lg w-full">
+  <div class="flex flex-col gap-space-sm pt-space-xs">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-space-xs">
+        <button id="cal-prev-month" aria-label="Mes anterior" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary active:scale-95 transition-transform">
+          <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+        </button>
+        <h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight capitalize" id="cal-month-label">Mes</h2>
+        <button id="cal-next-month" aria-label="Mes siguiente" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary active:scale-95 transition-transform">
+          <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+        </button>
+      </div>
+      <button id="cal-today-btn" class="px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md">Hoy</button>
+    </div>
+    <div class="grid grid-cols-7 gap-1 text-center" id="cal-weekday-row"></div>
+    <div class="grid grid-cols-7 gap-1" id="cal-grid"></div>
+  </div>
+
+  <div class="flex flex-col gap-space-md">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-space-xs">
+        <span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
+        <h3 class="font-headline-sm text-headline-sm text-on-surface" id="cal-selected-day-label">Hoy</h3>
+      </div>
+      <span class="font-label-md text-label-md text-on-surface-variant font-medium" id="cal-day-count">0 tareas</span>
+    </div>
+    <div id="cal-day-tasks" class="flex flex-col gap-space-sm"></div>
+    <div id="cal-day-empty" class="hidden flex flex-col items-center justify-center gap-2 py-space-2xl text-center">
+      <span class="material-symbols-outlined text-[36px] text-outline">event_available</span>
+      <p class="font-body-md text-body-md text-on-surface-variant">Sin tareas ni entregas este día.</p>
+    </div>
+  </div>
+</section>
+<!-- VIEW: AJUSTES -->
+<section id="view-ajustes" class="view flex-col gap-space-xl w-full pb-space-2xl">
+  <div class="flex flex-col gap-space-xs pt-space-xs">
+    <p class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider">Tu cuenta</p>
+    <h1 class="font-headline-lg text-headline-lg text-on-surface">Ajustes</h1>
+  </div>
+
+  <!-- Profile -->
+  <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex items-center gap-space-md">
+    <div class="w-14 h-14 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-headline-md text-headline-md" id="ajustes-avatar">S</div>
+    <div class="flex-1 min-w-0">
+      <input id="settings-name" class="w-full bg-transparent font-headline-sm text-headline-sm text-on-surface focus:outline-none border-b border-transparent focus:border-primary" value="Sofía" />
+      <p class="font-body-sm text-body-sm text-on-surface-variant truncate" id="settings-email">Estudiante</p>
+    </div>
+  </div>
+
+  <!-- Cuenta / sesión -->
+  <div class="flex flex-col gap-space-sm">
+    <div class="flex items-center gap-space-xs px-1">
+      <span class="material-symbols-outlined text-primary text-[20px]">cloud_sync</span>
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Cuenta y sincronización</h2>
+    </div>
+    <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-space-sm">
+      <p class="font-body-sm text-body-sm text-on-surface-variant">
+        Tus datos viven en Supabase (Postgres en la nube), no en este dispositivo. Puedes cerrar sesión
+        y volver a entrar desde cualquier navegador o equipo con tu mismo correo.
+      </p>
+      <button id="btn-signout" class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md active:scale-95 transition-transform">
+        <span class="material-symbols-outlined text-[18px]">logout</span> Cerrar sesión
+      </button>
+    </div>
+  </div>
+
+  <!-- Widget persistente -->
+  <div class="flex flex-col gap-space-sm">
+    <div class="flex items-center justify-between px-1">
+      <div class="flex items-center gap-space-xs">
+        <span class="material-symbols-outlined text-primary text-[20px]">dock_to_bottom</span>
+        <h2 class="font-headline-sm text-headline-sm text-on-surface">Widget Flotante</h2>
+      </div>
+    </div>
+    <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-space-md">
+      <div class="flex items-center justify-between gap-space-sm">
+        <div class="flex flex-col min-w-0 flex-1">
+          <span class="font-label-lg text-label-lg text-on-surface">Mostrar en todas las pantallas</span>
+          <span class="font-body-sm text-body-sm text-on-surface-variant">Mantén la captura rápida siempre accesible</span>
+        </div>
+        <button id="toggle-widget" class="switch w-12 h-7 rounded-full p-0.5 relative flex items-center" role="switch" data-key="widgetEnabled">
+          <span class="knob w-6 h-6 bg-white rounded-full shadow-md"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notificaciones -->
+  <div class="flex flex-col gap-space-sm">
+    <div class="flex items-center gap-space-xs px-1">
+      <span class="material-symbols-outlined text-primary text-[20px]">notifications_active</span>
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Notificaciones</h2>
+    </div>
+    <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-space-md">
+      <div class="flex items-center justify-between gap-space-sm">
+        <div class="flex flex-col min-w-0 flex-1">
+          <span class="font-label-lg text-label-lg text-on-surface">Avisar tareas vencidas</span>
+          <span class="font-body-sm text-body-sm text-on-surface-variant">Muestra alerta cuando una tarea pasa su fecha límite</span>
+        </div>
+        <button id="toggle-notif-overdue" class="switch w-12 h-7 rounded-full p-0.5 relative flex items-center" role="switch" data-key="notifOverdue">
+          <span class="knob w-6 h-6 bg-white rounded-full shadow-md"></span>
+        </button>
+      </div>
+      <div class="flex items-center justify-between gap-space-sm">
+        <div class="flex flex-col min-w-0 flex-1">
+          <span class="font-label-lg text-label-lg text-on-surface">Avisar tareas de hoy</span>
+          <span class="font-body-sm text-body-sm text-on-surface-variant">Recuerda lo que vence en las próximas 24 horas</span>
+        </div>
+        <button id="toggle-notif-today" class="switch w-12 h-7 rounded-full p-0.5 relative flex items-center" role="switch" data-key="notifDueSoon">
+          <span class="knob w-6 h-6 bg-white rounded-full shadow-md"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Datos / base de datos local -->
+  <div class="flex flex-col gap-space-sm">
+    <div class="flex items-center gap-space-xs px-1">
+      <span class="material-symbols-outlined text-primary text-[20px]">database</span>
+      <h2 class="font-headline-sm text-headline-sm text-on-surface">Datos</h2>
+    </div>
+    <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-space-sm">
+      <p class="font-body-sm text-body-sm text-on-surface-variant">
+        Tus materias y tareas se guardan en <b>Supabase</b> (Postgres en la nube), asociadas a tu cuenta,
+        así que están disponibles desde cualquier dispositivo donde inicies sesión.
+      </p>
+      <div class="flex items-center justify-between py-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Materias guardadas</span>
+        <span class="font-label-lg text-label-lg text-on-surface font-bold" id="stat-subjects">0</span>
+      </div>
+      <div class="flex items-center justify-between py-1 border-t border-outline-variant/30 pt-2">
+        <span class="font-label-md text-label-md text-on-surface-variant">Tareas guardadas</span>
+        <span class="font-label-lg text-label-lg text-on-surface font-bold" id="stat-tasks">0</span>
+      </div>
+      <button id="btn-export-data" class="mt-2 flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md active:scale-95 transition-transform">
+        <span class="material-symbols-outlined text-[18px]">download</span> Exportar datos (.json)
+      </button>
+      <button id="btn-reset-data" class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-error-container text-on-error-container font-label-md text-label-md active:scale-95 transition-transform">
+        <span class="material-symbols-outlined text-[18px]">delete_forever</span> Borrar todos mis datos
+      </button>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- FLOATING PERSISTENT QUICK-ADD DOCK -->
+<aside id="quick-dock" class="fixed bottom-20 left-0 right-0 z-40 px-margin-mobile pointer-events-none pb-safe">
+  <div class="max-w-md mx-auto pointer-events-auto bg-surface-container-lowest/95 backdrop-blur-xl rounded-full shadow-[0_12px_32px_-4px_rgba(15,23,42,0.12),0_4px_12px_-2px_rgba(15,23,42,0.06)] px-space-xs py-space-2xs flex items-center gap-space-xs">
+    <span class="w-11 h-11 rounded-full flex items-center justify-center text-on-surface-variant flex-shrink-0">
+      <span class="material-symbols-outlined text-[20px]">bolt</span>
+    </span>
+    <div class="flex-1 flex items-center">
+      <input id="quick-add-input" class="w-full bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none px-space-xs" placeholder="Escribe una nota rápida..." type="text"/>
+    </div>
+    <button id="quick-add-btn" aria-label="Crear tarea rápida" class="w-11 h-11 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm active:scale-95 transition-all flex-shrink-0">
+      <span class="material-symbols-outlined text-[22px]">add</span>
+    </button>
+  </div>
+</aside>
+
+<!-- BOTTOM NAV -->
+<nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.03)]">
+  <div class="h-16 px-gutter-mobile flex items-center justify-around max-w-3xl mx-auto">
+    <button data-view="tareas" class="nav-btn flex flex-col items-center justify-center w-16 h-12 transition-colors">
+      <span class="material-symbols-outlined text-[24px]">check_circle</span>
+      <span class="font-label-sm text-label-sm mt-0.5">Tareas</span>
+    </button>
+    <button data-view="materias" class="nav-btn flex flex-col items-center justify-center w-16 h-12 transition-colors">
+      <span class="material-symbols-outlined text-[24px]">folder_open</span>
+      <span class="font-label-sm text-label-sm mt-0.5">Materias</span>
+    </button>
+    <button data-view="calendario" class="nav-btn flex flex-col items-center justify-center w-16 h-12 transition-colors">
+      <span class="material-symbols-outlined text-[24px]">calendar_today</span>
+      <span class="font-label-sm text-label-sm mt-0.5">Calendario</span>
+    </button>
+    <button data-view="ajustes" class="nav-btn flex flex-col items-center justify-center w-16 h-12 transition-colors">
+      <span class="material-symbols-outlined text-[24px]">settings</span>
+      <span class="font-label-sm text-label-sm mt-0.5">Ajustes</span>
+    </button>
+  </div>
+</nav>
+<!-- MODAL: TASK FORM -->
+<div id="modal-task" class="modal-backdrop fixed inset-0 z-[70] bg-inverse-surface/40 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="fade-in w-full sm:max-w-md bg-surface-container-lowest rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[92vh] overflow-y-auto">
+    <div class="flex items-center justify-between p-space-md border-b border-outline-variant/30 sticky top-0 bg-surface-container-lowest z-10">
+      <h3 class="font-headline-sm text-headline-sm text-on-surface" id="task-modal-title">Nueva tarea</h3>
+      <button data-close-modal="modal-task" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    <form id="task-form" class="flex flex-col gap-space-md p-space-md">
+      <input type="hidden" id="task-id"/>
+      <div class="flex flex-col gap-1">
+        <label class="font-label-md text-label-md text-on-surface-variant">Título</label>
+        <input required id="task-title" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:bg-surface-container-lowest font-body-md text-body-md" placeholder="Ej. Entregar ensayo de historia"/>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="font-label-md text-label-md text-on-surface-variant">Descripción (opcional)</label>
+        <textarea id="task-desc" rows="2" class="px-3 py-2 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary focus:bg-surface-container-lowest font-body-md text-body-md resize-none" placeholder="Detalles adicionales..."></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-space-sm">
+        <div class="flex flex-col gap-1">
+          <label class="font-label-md text-label-md text-on-surface-variant">Materia</label>
+          <select id="task-subject" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md"></select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="font-label-md text-label-md text-on-surface-variant">Prioridad</label>
+          <select id="task-priority" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md">
+            <option value="alta">Alta</option>
+            <option value="media" selected>Media</option>
+            <option value="baja">Baja</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-space-sm">
+        <div class="flex flex-col gap-1">
+          <label class="font-label-md text-label-md text-on-surface-variant">Fecha límite</label>
+          <input type="date" id="task-date" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md"/>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="font-label-md text-label-md text-on-surface-variant">Hora (opcional)</label>
+          <input type="time" id="task-time" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md"/>
+        </div>
+      </div>
+      <label class="flex items-center gap-2 py-1">
+        <input type="checkbox" id="task-pinned" class="w-5 h-5 accent-primary rounded"/>
+        <span class="font-body-md text-body-md text-on-surface">Fijar como recordatorio prioritario</span>
+      </label>
+      <div class="flex items-center gap-space-sm pt-space-xs">
+        <button type="button" id="task-delete-btn" class="hidden flex-1 py-3 rounded-xl bg-error-container text-on-error-container font-label-lg text-label-lg active:scale-95 transition-transform">Eliminar</button>
+        <button type="submit" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg shadow-sm active:scale-95 transition-transform">Guardar tarea</button>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- MODAL: SUBJECT FORM -->
+<div id="modal-subject" class="modal-backdrop fixed inset-0 z-[70] bg-inverse-surface/40 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="fade-in w-full sm:max-w-md bg-surface-container-lowest rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[92vh] overflow-y-auto">
+    <div class="flex items-center justify-between p-space-md border-b border-outline-variant/30 sticky top-0 bg-surface-container-lowest z-10">
+      <h3 class="font-headline-sm text-headline-sm text-on-surface" id="subject-modal-title">Nueva materia</h3>
+      <button data-close-modal="modal-subject" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    <form id="subject-form" class="flex flex-col gap-space-md p-space-md">
+      <input type="hidden" id="subject-id"/>
+      <div class="flex flex-col gap-1">
+        <label class="font-label-md text-label-md text-on-surface-variant">Nombre de la materia</label>
+        <input required id="subject-name" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md" placeholder="Ej. Biología"/>
+      </div>
+      <div class="grid grid-cols-2 gap-space-sm">
+        <div class="flex flex-col gap-1">
+          <label class="font-label-md text-label-md text-on-surface-variant">Profesor (opcional)</label>
+          <input id="subject-professor" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md" placeholder="Nombre"/>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="font-label-md text-label-md text-on-surface-variant">Aula (opcional)</label>
+          <input id="subject-room" class="h-11 px-3 rounded-xl bg-surface-container-low border border-outline-variant/50 focus:outline-none focus:border-primary font-body-md text-body-md" placeholder="Ej. B-204"/>
+        </div>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="font-label-md text-label-md text-on-surface-variant">Ícono</label>
+        <div id="subject-icon-picker" class="flex items-center gap-2 flex-wrap"></div>
+        <input type="hidden" id="subject-icon" value="menu_book"/>
+      </div>
+      <div class="flex items-center gap-space-sm pt-space-xs">
+        <button type="button" id="subject-delete-btn" class="hidden flex-1 py-3 rounded-xl bg-error-container text-on-error-container font-label-lg text-label-lg active:scale-95 transition-transform">Eliminar</button>
+        <button type="submit" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg shadow-sm active:scale-95 transition-transform">Guardar materia</button>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- MODAL: NOTIFICATIONS -->
+<div id="modal-notifs" class="modal-backdrop fixed inset-0 z-[70] bg-inverse-surface/40 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="fade-in w-full sm:max-w-md bg-surface-container-lowest rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[85vh] overflow-y-auto">
+    <div class="flex items-center justify-between p-space-md border-b border-outline-variant/30 sticky top-0 bg-surface-container-lowest z-10">
+      <h3 class="font-headline-sm text-headline-sm text-on-surface">Centro de notificaciones</h3>
+      <button data-close-modal="modal-notifs" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    <div id="notifs-list" class="flex flex-col gap-space-sm p-space-md"></div>
+    <div id="notifs-empty" class="hidden flex flex-col items-center justify-center gap-2 py-space-2xl text-center px-space-md">
+      <span class="material-symbols-outlined text-[36px] text-outline">notifications_off</span>
+      <p class="font-body-md text-body-md text-on-surface-variant">Estás al día, sin notificaciones pendientes.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm dialog -->
+<div id="modal-confirm" class="modal-backdrop fixed inset-0 z-[80] bg-inverse-surface/40 backdrop-blur-sm items-center justify-center p-4">
+  <div class="fade-in w-full max-w-xs bg-surface-container-lowest rounded-2xl shadow-xl p-space-lg flex flex-col gap-space-md text-center">
+    <span class="material-symbols-outlined text-[36px] text-error mx-auto">warning</span>
+    <p id="confirm-text" class="font-body-md text-body-md text-on-surface">¿Seguro que deseas continuar?</p>
+    <div class="flex items-center gap-space-sm">
+      <button id="confirm-cancel" class="flex-1 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label-lg text-label-lg">Cancelar</button>
+      <button id="confirm-ok" class="flex-1 py-2.5 rounded-xl bg-error text-on-error font-label-lg text-label-lg">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast-container" class="fixed bottom-24 left-1/2 z-[90] pointer-events-none"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+     1. CLIENTE DE SUPABASE + ALMACENAMIENTO DE SESIÓN (IndexedDB)
+     ============================================================
+     Nota: usamos IndexedDB (no localStorage) solo para que el SDK
+     de Supabase guarde el token de sesión, así el login persiste
+     entre recargas sin depender de localStorage. */
+
+  const AUTH_DB_NAME = "taskflow_auth_kv";
+  let authDb = null;
+  function openAuthDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(AUTH_DB_NAME, 1);
+      req.onupgradeneeded = (e) => { e.target.result.createObjectStore("kv", { keyPath: "key" }); };
+      req.onsuccess = (e) => { authDb = e.target.result; resolve(authDb); };
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+  const idbAuthStorage = {
+    async getItem(key) {
+      if (!authDb) await openAuthDb();
+      return new Promise((resolve) => {
+        const req = authDb.transaction("kv", "readonly").objectStore("kv").get(key);
+        req.onsuccess = () => resolve(req.result ? req.result.value : null);
+        req.onerror = () => resolve(null);
+      });
+    },
+    async setItem(key, value) {
+      if (!authDb) await openAuthDb();
+      return new Promise((resolve) => {
+        const req = authDb.transaction("kv", "readwrite").objectStore("kv").put({ key, value });
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+      });
+    },
+    async removeItem(key) {
+      if (!authDb) await openAuthDb();
+      return new Promise((resolve) => {
+        const req = authDb.transaction("kv", "readwrite").objectStore("kv").delete(key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+      });
+    },
+  };
+
+  const CONFIG_OK = window.SUPABASE_URL && window.SUPABASE_ANON_KEY &&
+    !window.SUPABASE_URL.includes("TU_SUPABASE") && !window.SUPABASE_ANON_KEY.includes("TU_SUPABASE");
+
+  let supabase = null;
+  if (CONFIG_OK) {
+    supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
+      auth: { storage: idbAuthStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
+  }
+
+  let currentUser = null;
+
+  /* ============================================================
+     2. MAPEO ENTRE FILAS DE POSTGRES (snake_case) Y EL MODELO DE LA APP
+     ============================================================ */
+  function taskFromDb(row) {
+    return {
+      id: row.id, title: row.title, description: row.description || "",
+      subjectId: row.subject_id, priority: row.priority || "media",
+      dueDate: row.due_date, dueTime: row.due_time || "",
+      completed: !!row.completed, pinned: !!row.pinned,
+    };
+  }
+  function taskToDb(t) {
+    return {
+      title: t.title, description: t.description || "", subject_id: t.subjectId ?? null,
+      priority: t.priority || "media", due_date: t.dueDate || null, due_time: t.dueTime || "",
+      completed: !!t.completed, pinned: !!t.pinned,
+    };
+  }
+  function subjectFromDb(row) {
+    return { id: row.id, name: row.name, professor: row.professor || "", room: row.room || "", icon: row.icon || "menu_book" };
+  }
+  function subjectToDb(s) {
+    return { name: s.name, professor: s.professor || "", room: s.room || "", icon: s.icon || "menu_book" };
+  }
+
+  /* ============================================================
+     3. ESTADO EN MEMORIA
+     ============================================================ */
+  const state = {
+    subjects: [],
+    tasks: [],
+    settings: { name: "Usuario", widgetEnabled: true, notifOverdue: true, notifDueSoon: true },
+    activeView: "tareas",
+    activeFilter: "todas",
+    calCursor: new Date(),
+    calSelected: todayISO(),
+  };
+
+  const SUBJECT_PALETTE = [
+    { bg: "#eef2ff", text: "#4338ca", dot: "#6366f1" },
+    { bg: "#ecfdf5", text: "#047857", dot: "#10b981" },
+    { bg: "#fff1e9", text: "#9d4300", dot: "#fd761a" },
+    { bg: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
+    { bg: "#eff6ff", text: "#1d4ed8", dot: "#3b82f6" },
+    { bg: "#fdf2f8", text: "#9d174d", dot: "#ec4899" },
+    { bg: "#f0fdfa", text: "#0f766e", dot: "#14b8a6" },
+    { bg: "#f5f3ff", text: "#6d28d9", dot: "#8b5cf6" },
+  ];
+  const ICON_CHOICES = ["menu_book","functions","science","history_edu","palette","sports_soccer","computer","biotech","public","calculate","language","music_note"];
+  const PRIORITY_META = {
+    alta: { label: "Alta", bg: "#ffdad6", text: "#93000a", icon: "priority_high" },
+    media: { label: "Media", bg: "#ffddb8", text: "#653e00", icon: "remove" },
+    baja: { label: "Baja", bg: "#e5eeff", text: "#464555", icon: "south" },
+  };
+  function subjectColor(subjectId) {
+    const idx = state.subjects.findIndex((s) => s.id === subjectId);
+    if (idx === -1) return { bg: "#e5eeff", text: "#464555", dot: "#777587" };
+    return SUBJECT_PALETTE[idx % SUBJECT_PALETTE.length];
+  }
+  function subjectById(id) { return state.subjects.find((s) => s.id === id); }
+
+  /* ============================================================
+     4. UTILIDADES DE FECHA
+     ============================================================ */
+  function todayISO() { const d = new Date(); d.setHours(0,0,0,0); return dateToISO(d); }
+  function dateToISO(d) { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; }
+  const WEEKDAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+  const MONTHS_LONG = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const DAY_LABEL = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+  function isOverdue(task) { if (task.completed || !task.dueDate) return false; return task.dueDate < todayISO(); }
+  function isDueToday(task) { return task.dueDate === todayISO(); }
+  function friendlyDate(iso) {
+    if (!iso) return "Sin fecha";
+    const t = todayISO();
+    if (iso === t) return "Hoy";
+    const d = new Date(iso + "T00:00:00");
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    if (iso === dateToISO(tomorrow)) return "Mañana";
+    return `${DAY_LABEL[d.getDay()].slice(0,3)} ${d.getDate()} ${MONTHS_LONG[d.getMonth()].slice(0,3)}`;
+  }
+  function friendlyTime(t) {
+    if (!t) return "";
+    const [h, m] = t.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  }
+
+  /* ============================================================
+     5. CARGA / GUARDADO CONTRA SUPABASE
+     ============================================================ */
+  async function loadAll() {
+    const [{ data: subjRows, error: subjErr }, { data: taskRows, error: taskErr }] = await Promise.all([
+      supabase.from("subjects").select("*").order("id"),
+      supabase.from("tasks").select("*").order("id"),
+    ]);
+    if (subjErr) console.error(subjErr);
+    if (taskErr) console.error(taskErr);
+    state.subjects = (subjRows || []).map(subjectFromDb);
+    state.tasks = (taskRows || []).map(taskFromDb);
+    await loadProfile();
+  }
+
+  async function loadProfile() {
+    let { data, error } = await supabase.from("profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
+    if (!data) {
+      const defaultName = (currentUser.email || "Usuario").split("@")[0];
+      const insertRes = await supabase.from("profiles").insert({
+        user_id: currentUser.id, name: defaultName, widget_enabled: true, notif_overdue: true, notif_due_soon: true,
+      }).select().single();
+      data = insertRes.data;
+    }
+    if (data) {
+      state.settings = {
+        name: data.name || "Usuario",
+        widgetEnabled: data.widget_enabled !== false,
+        notifOverdue: data.notif_overdue !== false,
+        notifDueSoon: data.notif_due_soon !== false,
+      };
+    }
+  }
+
+  async function updateProfile(patch) {
+    Object.assign(state.settings, patch);
+    const dbPatch = {};
+    if ("name" in patch) dbPatch.name = patch.name;
+    if ("widgetEnabled" in patch) dbPatch.widget_enabled = patch.widgetEnabled;
+    if ("notifOverdue" in patch) dbPatch.notif_overdue = patch.notifOverdue;
+    if ("notifDueSoon" in patch) dbPatch.notif_due_soon = patch.notifDueSoon;
+    await supabase.from("profiles").update(dbPatch).eq("user_id", currentUser.id);
+  }
+
+  async function seedIfEmpty() {
+    if (state.subjects.length > 0) return;
+    const uid = currentUser.id;
+    const { data: s1 } = await supabase.from("subjects").insert({ user_id: uid, name: "Matemáticas", professor: "Dr. Ramírez", room: "Aula B-204", icon: "calculate" }).select().single();
+    const { data: s2 } = await supabase.from("subjects").insert({ user_id: uid, name: "Historia", professor: "Lic. Torres", room: "Aula A-101", icon: "history_edu" }).select().single();
+    const { data: s3 } = await supabase.from("subjects").insert({ user_id: uid, name: "Personal", professor: "", room: "", icon: "self_improvement" }).select().single();
+    const t = todayISO();
+    const tomorrow = dateToISO(new Date(Date.now() + 86400000));
+    const yesterday = dateToISO(new Date(Date.now() - 86400000));
+    await supabase.from("tasks").insert([
+      { user_id: uid, title: "Comprar juego geométrico", description: "Regla, escuadra y compás de precisión para el taller práctico.", subject_id: s1.id, priority: "alta", due_date: t, due_time: "10:00", completed: false, pinned: true },
+      { user_id: uid, title: "Entregar ejercicios de álgebra", description: "Capítulo 4, ejercicios 1 al 20.", subject_id: s1.id, priority: "media", due_date: t, due_time: "13:00", completed: false, pinned: false },
+      { user_id: uid, title: "Leer capítulo sobre la Revolución Francesa", description: "", subject_id: s2.id, priority: "media", due_date: tomorrow, due_time: "", completed: false, pinned: false },
+      { user_id: uid, title: "Llamar al dentista", description: "", subject_id: s3.id, priority: "baja", due_date: yesterday, due_time: "", completed: false, pinned: false },
+      { user_id: uid, title: "Ensayo de historia entregado", description: "", subject_id: s2.id, priority: "baja", due_date: yesterday, due_time: "", completed: true, pinned: false },
+    ]);
+    await loadAll();
+  }
+
+  /* ============================================================
+     6. NAVEGACIÓN Y RENDER GENERAL
+     ============================================================ */
+  function switchView(name) {
+    state.activeView = name;
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+    document.getElementById("view-" + name).classList.add("active");
+    document.querySelectorAll(".nav-btn").forEach((b) => {
+      const active = b.dataset.view === name;
+      b.classList.toggle("text-primary", active);
+      b.classList.toggle("font-bold", active);
+      b.classList.toggle("text-on-surface-variant", !active);
+    });
+    const subtitles = { tareas: "Tareas", materias: "Materias", calendario: "Calendario", ajustes: "Ajustes" };
+    document.getElementById("header-subtitle").textContent = subtitles[name] || "";
+    const dock = document.getElementById("quick-dock");
+    dock.style.display = (name === "ajustes" || !state.settings.widgetEnabled) ? "none" : "block";
+    renderAll();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function renderAll() {
+    renderGreetingAndFilters();
+    renderTaskList();
+    renderPinned();
+    renderSubjects();
+    renderCalendar();
+    renderAjustes();
+    renderNotifBadge();
+  }
+
+  /* ============================================================
+     7. VISTA: TAREAS
+     ============================================================ */
+  function renderGreetingAndFilters() {
+    document.getElementById("greeting-text").textContent = `¡Hola, ${state.settings.name || "Usuario"}! 👋`;
+    document.getElementById("profile-initial").textContent = (state.settings.name || "U").charAt(0).toUpperCase();
+    document.getElementById("ajustes-avatar").textContent = (state.settings.name || "U").charAt(0).toUpperCase();
+
+    const pendingTotal = state.tasks.filter((t) => !t.completed).length;
+    document.getElementById("pending-count-text").innerHTML = `Tienes <span class="font-headline-sm text-headline-sm text-primary">${pendingTotal} tarea${pendingTotal === 1 ? "" : "s"}</span> pendientes`;
+
+    const todays = state.tasks.filter((t) => t.dueDate === todayISO());
+    const doneToday = todays.filter((t) => t.completed).length;
+    const pct = todays.length ? Math.round((doneToday / todays.length) * 100) : 0;
+    document.getElementById("progress-pct").textContent = pct + "%";
+
+    const wrap = document.getElementById("filter-pills");
+    wrap.innerHTML = "";
+    const allCount = state.tasks.filter((t) => !t.completed).length;
+    wrap.appendChild(makePill("todas", "Todas", allCount, null));
+    state.subjects.forEach((s) => {
+      const count = state.tasks.filter((t) => t.subjectId === s.id && !t.completed).length;
+      wrap.appendChild(makePill(String(s.id), s.name, count, subjectColor(s.id).dot));
+    });
+  }
+
+  function makePill(filterKey, label, count, dotColor) {
+    const btn = document.createElement("button");
+    const active = state.activeFilter === filterKey;
+    btn.className = "shrink-0 px-space-md py-space-2xs rounded-full font-label-md text-label-md transition-all duration-200 active:scale-95 flex items-center gap-1.5 " +
+      (active ? "bg-primary text-on-primary shadow-sm" : "bg-surface-container-low text-on-surface hover:bg-surface-container");
+    btn.innerHTML = (dotColor ? `<span class="w-2 h-2 rounded-full" style="background:${dotColor}"></span>` : "") +
+      `<span>${escapeHtml(label)}</span>` +
+      `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold ${active ? "bg-on-primary/20 text-on-primary" : "bg-surface-variant text-primary"}">${count}</span>`;
+    btn.addEventListener("click", () => { state.activeFilter = filterKey; renderGreetingAndFilters(); renderTaskList(); });
+    return btn;
+  }
+
+  function visibleTasks() {
+    let list = state.tasks.slice();
+    if (state.activeFilter !== "todas") {
+      const sid = Number(state.activeFilter);
+      list = list.filter((t) => t.subjectId === sid);
+    }
+    list.sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      const ao = isOverdue(a), bo = isOverdue(b);
+      if (ao !== bo) return ao ? -1 : 1;
+      return (a.dueDate || "9999").localeCompare(b.dueDate || "9999");
+    });
+    return list;
+  }
+
+  function renderPinned() {
+    const pinnedTask = state.tasks.find((t) => t.pinned && !t.completed);
+    const section = document.getElementById("pinned-section");
+    const card = document.getElementById("pinned-card");
+    if (!pinnedTask) { section.classList.add("hidden"); return; }
+    section.classList.remove("hidden");
+    const subj = subjectById(pinnedTask.subjectId);
+    const col = subjectColor(pinnedTask.subjectId);
+    card.innerHTML = `
+      <div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none"></div>
+      <div class="flex flex-col gap-space-sm relative z-10">
+        <div class="flex items-start justify-between gap-space-sm">
+          <div class="flex flex-wrap items-center gap-space-xs">
+            ${subj ? `<span class="px-space-xs py-space-2xs rounded-full font-label-sm text-label-sm flex items-center gap-1" style="background:${col.bg};color:${col.text}"><span class="material-symbols-outlined text-[14px]">${subj.icon || "menu_book"}</span>${escapeHtml(subj.name)}</span>` : ""}
+            <span class="px-space-xs py-space-2xs rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1">
+              <span class="material-symbols-outlined text-[14px]">event</span>${friendlyDate(pinnedTask.dueDate)}${pinnedTask.dueTime ? " · " + friendlyTime(pinnedTask.dueTime) : ""}
+            </span>
+          </div>
+          <button class="pin-edit-btn w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container" data-id="${pinnedTask.id}">
+            <span class="material-symbols-outlined text-[18px]">edit</span>
+          </button>
+        </div>
+        <p class="font-headline-sm text-headline-sm text-on-surface">${escapeHtml(pinnedTask.title)}</p>
+        ${pinnedTask.description ? `<p class="font-body-sm text-body-sm text-on-surface-variant">${escapeHtml(pinnedTask.description)}</p>` : ""}
+        <button class="pin-complete-btn self-start flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-on-primary font-label-md text-label-md shadow-sm active:scale-95 transition-transform" data-id="${pinnedTask.id}">
+          <span class="material-symbols-outlined text-[16px]">check</span> Marcar como completada
+        </button>
+      </div>`;
+    card.querySelector(".pin-edit-btn").addEventListener("click", () => openTaskModal(pinnedTask.id));
+    card.querySelector(".pin-complete-btn").addEventListener("click", () => toggleTaskComplete(pinnedTask.id));
+  }
+
+  function renderTaskList() {
+    const listEl = document.getElementById("task-list");
+    const emptyEl = document.getElementById("task-empty");
+    const list = visibleTasks();
+    listEl.innerHTML = "";
+    if (list.length === 0) { emptyEl.classList.remove("hidden"); return; }
+    emptyEl.classList.add("hidden");
+    list.forEach((task) => listEl.appendChild(taskCard(task)));
+  }
+
+  function taskCard(task) {
+    const subj = subjectById(task.subjectId);
+    const col = subjectColor(task.subjectId);
+    const overdue = isOverdue(task);
+    const pmeta = PRIORITY_META[task.priority] || PRIORITY_META.media;
+    const el = document.createElement("div");
+    el.className = "bg-surface-container-lowest rounded-xl p-space-md shadow-sm border border-outline-variant/20 flex flex-col gap-space-xs" + (task.completed ? " opacity-60" : "");
+    el.innerHTML = `
+      <div class="flex items-start gap-space-sm">
+        <button class="task-check-btn mt-0.5 w-6 h-6 rounded-md border-[1.5px] flex items-center justify-center flex-shrink-0 transition-all" style="border-color:${task.completed ? "#3525cd" : "#cbd5e1"}; background:${task.completed ? "#3525cd" : "transparent"}">
+          ${task.completed ? '<span class="material-symbols-outlined text-[16px] text-white">check</span>' : ""}
+        </button>
+        <div class="flex-1 min-w-0 task-open-edit cursor-pointer">
+          <p class="font-body-lg text-body-lg font-semibold text-on-surface ${task.completed ? "strike" : ""}">${escapeHtml(task.title)}</p>
+          ${task.description ? `<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">${escapeHtml(task.description)}</p>` : ""}
+          <div class="flex flex-wrap items-center gap-1.5 mt-2">
+            ${subj ? `<span class="px-2 py-0.5 rounded-full font-label-sm text-[11px] font-bold" style="background:${col.bg};color:${col.text}">${escapeHtml(subj.name)}</span>` : ""}
+            <span class="px-2 py-0.5 rounded-full font-label-sm text-[11px] font-bold flex items-center gap-1" style="background:${overdue ? "#ffdad6" : "#e5eeff"};color:${overdue ? "#93000a" : "#464555"}">
+              <span class="material-symbols-outlined text-[12px]">${overdue ? "warning" : "event"}</span>${friendlyDate(task.dueDate)}${task.dueTime ? " " + friendlyTime(task.dueTime) : ""}
+            </span>
+            <span class="px-2 py-0.5 rounded-full font-label-sm text-[11px] font-bold flex items-center gap-1" style="background:${pmeta.bg};color:${pmeta.text}">
+              <span class="material-symbols-outlined text-[12px]">${pmeta.icon}</span>${pmeta.label}
+            </span>
+            ${task.pinned ? `<span class="material-symbols-outlined text-[14px] text-secondary" style="font-variation-settings:'FILL' 1">push_pin</span>` : ""}
+          </div>
+        </div>
+      </div>`;
+    el.querySelector(".task-check-btn").addEventListener("click", () => toggleTaskComplete(task.id));
+    el.querySelector(".task-open-edit").addEventListener("click", () => openTaskModal(task.id));
+    return el;
+  }
+
+  async function toggleTaskComplete(id) {
+    const task = state.tasks.find((t) => t.id === id);
+    if (!task) return;
+    task.completed = !task.completed;
+    renderAll();
+    const { error } = await supabase.from("tasks").update({ completed: task.completed }).eq("id", id);
+    if (error) { console.error(error); showToast("No se pudo sincronizar ❌"); }
+    else showToast(task.completed ? "Tarea completada ✅" : "Tarea marcada como pendiente");
+  }
+
+  /* ============================================================
+     8. VISTA: MATERIAS
+     ============================================================ */
+  function renderSubjects() {
+    const listEl = document.getElementById("subjects-list");
+    const emptyEl = document.getElementById("subjects-empty");
+    const query = (document.getElementById("subject-search").value || "").toLowerCase().trim();
+    let subjects = state.subjects.slice();
+    if (query) subjects = subjects.filter((s) => (s.name + " " + (s.professor || "")).toLowerCase().includes(query));
+    listEl.innerHTML = "";
+    if (subjects.length === 0) { emptyEl.classList.remove("hidden"); return; }
+    emptyEl.classList.add("hidden");
+    subjects.forEach((s) => listEl.appendChild(subjectCard(s)));
+  }
+
+  function subjectCard(subject) {
+    const col = subjectColor(subject.id);
+    const tasksOf = state.tasks.filter((t) => t.subjectId === subject.id);
+    const pending = tasksOf.filter((t) => !t.completed).length;
+    const total = tasksOf.length;
+    const progress = total ? Math.round(((total - pending) / total) * 100) : 0;
+    const el = document.createElement("div");
+    el.className = "relative overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm p-space-md flex flex-col gap-space-sm cursor-pointer";
+    el.innerHTML = `
+      <div class="absolute left-0 top-0 bottom-0 w-1.5" style="background:${col.dot}"></div>
+      <div class="flex items-start justify-between gap-space-sm">
+        <div class="flex items-center gap-space-xs min-w-0">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:${col.bg};color:${col.text}">
+            <span class="material-symbols-outlined text-[22px]">${subject.icon || "menu_book"}</span>
+          </div>
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <h2 class="font-headline-sm text-headline-sm text-on-surface truncate">${escapeHtml(subject.name)}</h2>
+              <span class="px-2 py-0.5 rounded-full font-label-sm text-[11px] font-bold" style="background:${col.bg};color:${col.text}">${pending} pendiente${pending === 1 ? "" : "s"}</span>
+            </div>
+            <p class="font-body-sm text-body-sm text-on-surface-variant truncate">${escapeHtml([subject.professor, subject.room].filter(Boolean).join(" • ") || "Sin detalles adicionales")}</p>
+          </div>
+        </div>
+        <div class="flex flex-col items-end flex-shrink-0">
+          <span class="font-headline-sm text-headline-sm font-bold" style="color:${col.text}">${progress}%</span>
+          <span class="font-label-sm text-[10px] text-on-surface-variant">completado</span>
+        </div>
+      </div>
+      <div class="w-full h-1.5 rounded-full bg-surface-container overflow-hidden">
+        <div class="h-full rounded-full" style="width:${progress}%;background:${col.dot}"></div>
+      </div>`;
+    el.addEventListener("click", () => openSubjectModal(subject.id));
+    return el;
+  }
+
+  /* ============================================================
+     9. VISTA: CALENDARIO
+     ============================================================ */
+  function renderCalendar() {
+    const cursor = state.calCursor;
+    document.getElementById("cal-month-label").textContent = `${MONTHS_LONG[cursor.getMonth()]} ${cursor.getFullYear()}`;
+    const weekdayRow = document.getElementById("cal-weekday-row");
+    weekdayRow.innerHTML = WEEKDAYS_SHORT.map((w) => `<span class="font-label-sm text-[10px] font-bold text-outline uppercase">${w}</span>`).join("");
+    const grid = document.getElementById("cal-grid");
+    grid.innerHTML = "";
+    const year = cursor.getFullYear(), month = cursor.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const startOffset = (firstDay.getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const tasksByDate = {};
+    state.tasks.forEach((t) => { if (t.dueDate) { (tasksByDate[t.dueDate] = tasksByDate[t.dueDate] || []).push(t); } });
+    for (let i = 0; i < startOffset; i++) grid.appendChild(document.createElement("div"));
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = dateToISO(new Date(year, month, day));
+      const dayTasks = tasksByDate[iso] || [];
+      const hasOverdue = dayTasks.some((t) => isOverdue(t));
+      const isToday = iso === todayISO();
+      const isSelected = iso === state.calSelected;
+      const cell = document.createElement("button");
+      cell.className = "flex flex-col items-center justify-center py-2 rounded-xl gap-0.5 transition-all " +
+        (isSelected ? "bg-primary text-on-primary shadow-md" : isToday ? "bg-surface-container-high text-on-surface font-bold" : "text-on-surface hover:bg-surface-container-low");
+      cell.innerHTML = `<span class="font-body-sm text-body-sm">${day}</span>` +
+        `<span class="w-1.5 h-1.5 rounded-full" style="background:${dayTasks.length ? (isSelected ? "#fff" : hasOverdue ? "#fd761a" : "#3525cd") : "transparent"}"></span>`;
+      cell.addEventListener("click", () => { state.calSelected = iso; renderCalendar(); });
+      grid.appendChild(cell);
+    }
+    renderCalendarDayList();
+  }
+
+  function renderCalendarDayList() {
+    const iso = state.calSelected;
+    const d = new Date(iso + "T00:00:00");
+    document.getElementById("cal-selected-day-label").textContent = iso === todayISO() ? "Hoy" : `${DAY_LABEL[d.getDay()]}, ${d.getDate()} de ${MONTHS_LONG[d.getMonth()]}`;
+    const dayTasks = state.tasks.filter((t) => t.dueDate === iso).sort((a, b) => (a.dueTime || "99:99").localeCompare(b.dueTime || "99:99"));
+    document.getElementById("cal-day-count").textContent = `${dayTasks.length} tarea${dayTasks.length === 1 ? "" : "s"}`;
+    const listEl = document.getElementById("cal-day-tasks");
+    const emptyEl = document.getElementById("cal-day-empty");
+    listEl.innerHTML = "";
+    if (dayTasks.length === 0) { emptyEl.classList.remove("hidden"); return; }
+    emptyEl.classList.add("hidden");
+    dayTasks.forEach((task) => listEl.appendChild(taskCard(task)));
+  }
+
+  document.getElementById("cal-prev-month").addEventListener("click", () => {
+    state.calCursor = new Date(state.calCursor.getFullYear(), state.calCursor.getMonth() - 1, 1);
+    renderCalendar();
+  });
+  document.getElementById("cal-next-month").addEventListener("click", () => {
+    state.calCursor = new Date(state.calCursor.getFullYear(), state.calCursor.getMonth() + 1, 1);
+    renderCalendar();
+  });
+  document.getElementById("cal-today-btn").addEventListener("click", () => {
+    state.calCursor = new Date();
+    state.calSelected = todayISO();
+    renderCalendar();
+  });
+
+  /* ============================================================
+     10. VISTA: AJUSTES
+     ============================================================ */
+  function renderAjustes() {
+    document.getElementById("settings-name").value = state.settings.name || "Usuario";
+    document.getElementById("settings-email").textContent = currentUser ? currentUser.email : "";
+    setSwitch("toggle-widget", !!state.settings.widgetEnabled);
+    setSwitch("toggle-notif-overdue", state.settings.notifOverdue !== false);
+    setSwitch("toggle-notif-today", state.settings.notifDueSoon !== false);
+    document.getElementById("stat-subjects").textContent = state.subjects.length;
+    document.getElementById("stat-tasks").textContent = state.tasks.length;
+  }
+  function setSwitch(id, on) { document.getElementById(id).setAttribute("data-on", on ? "true" : "false"); }
+
+  document.querySelectorAll(".switch").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const on = btn.getAttribute("data-on") !== "true";
+      btn.setAttribute("data-on", on ? "true" : "false");
+      await updateProfile({ [btn.dataset.key]: on });
+      if (btn.dataset.key === "widgetEnabled") {
+        document.getElementById("quick-dock").style.display = (on && state.activeView !== "ajustes") ? "block" : "none";
+      }
+      renderNotifBadge();
+    });
+  });
+
+  document.getElementById("settings-name").addEventListener("change", async (e) => {
+    await updateProfile({ name: e.target.value.trim() || "Usuario" });
+    renderGreetingAndFilters();
+  });
+
+  document.getElementById("btn-export-data").addEventListener("click", () => {
+    const payload = { subjects: state.subjects, tasks: state.tasks, settings: state.settings, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "taskflow_datos.json"; a.click();
+    URL.revokeObjectURL(url);
+    showToast("Datos exportados 📦");
+  });
+
+  document.getElementById("btn-reset-data").addEventListener("click", () => {
+    confirmDialog("Esto borrará todas tus materias y tareas guardadas en Supabase. Esta acción no se puede deshacer.", async () => {
+      await supabase.from("tasks").delete().eq("user_id", currentUser.id);
+      await supabase.from("subjects").delete().eq("user_id", currentUser.id);
+      await loadAll();
+      renderAll();
+      showToast("Todos los datos fueron eliminados 🗑️");
+    });
+  });
+
+  document.getElementById("btn-signout").addEventListener("click", () => {
+    confirmDialog("¿Cerrar sesión?", async () => { await supabase.auth.signOut(); });
+  });
+
+  /* ============================================================
+     11. NAV / MODALES GENÉRICOS
+     ============================================================ */
+  document.querySelectorAll(".nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+  document.getElementById("btn-open-ajustes-header").addEventListener("click", () => switchView("ajustes"));
+  document.getElementById("subject-search").addEventListener("input", renderSubjects);
+
+  function openModal(id) { document.getElementById(id).classList.add("active"); }
+  function closeModal(id) { document.getElementById(id).classList.remove("active"); }
+  document.querySelectorAll("[data-close-modal]").forEach((btn) => btn.addEventListener("click", () => closeModal(btn.dataset.closeModal)));
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => {
+    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.classList.remove("active"); });
+  });
+
+  let confirmCallback = null;
+  function confirmDialog(text, onConfirm) {
+    document.getElementById("confirm-text").textContent = text;
+    confirmCallback = onConfirm;
+    openModal("modal-confirm");
+  }
+  document.getElementById("confirm-ok").addEventListener("click", () => {
+    closeModal("modal-confirm");
+    if (confirmCallback) confirmCallback();
+    confirmCallback = null;
+  });
+  document.getElementById("confirm-cancel").addEventListener("click", () => { closeModal("modal-confirm"); confirmCallback = null; });
+
+  function showToast(msg) {
+    const container = document.getElementById("toast-container");
+    const t = document.createElement("div");
+    t.className = "toast bg-inverse-surface text-inverse-on-surface font-label-md text-label-md px-4 py-2.5 rounded-full shadow-lg whitespace-nowrap";
+    t.textContent = msg;
+    container.innerHTML = "";
+    container.appendChild(t);
+    setTimeout(() => { t.remove(); }, 3000);
+  }
+  function escapeHtml(str) { const div = document.createElement("div"); div.textContent = str == null ? "" : String(str); return div.innerHTML; }
+
+  /* ============================================================
+     12. MODAL TAREA
+     ============================================================ */
+  function populateSubjectSelect() {
+    const sel = document.getElementById("task-subject");
+    sel.innerHTML = `<option value="">General (sin materia)</option>` +
+      state.subjects.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+  }
+
+  function openTaskModal(taskId) {
+    populateSubjectSelect();
+    const form = document.getElementById("task-form");
+    form.reset();
+    const deleteBtn = document.getElementById("task-delete-btn");
+    if (taskId) {
+      const task = state.tasks.find((t) => t.id === taskId);
+      document.getElementById("task-modal-title").textContent = "Editar tarea";
+      document.getElementById("task-id").value = task.id;
+      document.getElementById("task-title").value = task.title;
+      document.getElementById("task-desc").value = task.description || "";
+      document.getElementById("task-subject").value = task.subjectId || "";
+      document.getElementById("task-priority").value = task.priority || "media";
+      document.getElementById("task-date").value = task.dueDate || "";
+      document.getElementById("task-time").value = task.dueTime || "";
+      document.getElementById("task-pinned").checked = !!task.pinned;
+      deleteBtn.classList.remove("hidden");
+      deleteBtn.onclick = () => {
+        confirmDialog("¿Eliminar esta tarea permanentemente?", async () => {
+          const { error } = await supabase.from("tasks").delete().eq("id", task.id);
+          if (error) { showToast("No se pudo eliminar ❌"); return; }
+          state.tasks = state.tasks.filter((t) => t.id !== task.id);
+          closeModal("modal-task");
+          renderAll();
+          showToast("Tarea eliminada");
+        });
+      };
+    } else {
+      document.getElementById("task-modal-title").textContent = "Nueva tarea";
+      document.getElementById("task-id").value = "";
+      document.getElementById("task-date").value = todayISO();
+      deleteBtn.classList.add("hidden");
+    }
+    openModal("modal-task");
+  }
+
+  document.getElementById("btn-add-task-inline").addEventListener("click", () => openTaskModal(null));
+
+  document.getElementById("task-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const idVal = document.getElementById("task-id").value;
+    const formTask = {
+      title: document.getElementById("task-title").value.trim(),
+      description: document.getElementById("task-desc").value.trim(),
+      subjectId: document.getElementById("task-subject").value ? Number(document.getElementById("task-subject").value) : null,
+      priority: document.getElementById("task-priority").value,
+      dueDate: document.getElementById("task-date").value || null,
+      dueTime: document.getElementById("task-time").value || "",
+      pinned: document.getElementById("task-pinned").checked,
+    };
+    if (!formTask.title) return;
+    if (idVal) {
+      const existing = state.tasks.find((t) => t.id === Number(idVal));
+      formTask.completed = existing ? existing.completed : false;
+      const { data, error } = await supabase.from("tasks").update(taskToDb(formTask)).eq("id", Number(idVal)).select().single();
+      if (error) { showToast("No se pudo actualizar ❌"); return; }
+      const updated = taskFromDb(data);
+      const idx = state.tasks.findIndex((t) => t.id === updated.id);
+      if (idx >= 0) state.tasks[idx] = updated;
+    } else {
+      formTask.completed = false;
+      const dbRow = taskToDb(formTask);
+      dbRow.user_id = currentUser.id;
+      const { data, error } = await supabase.from("tasks").insert(dbRow).select().single();
+      if (error) { showToast("No se pudo crear la tarea ❌"); return; }
+      state.tasks.push(taskFromDb(data));
+    }
+    closeModal("modal-task");
+    renderAll();
+    showToast(idVal ? "Tarea actualizada ✏️" : "Tarea creada 🎉");
+  });
+
+  /* ============================================================
+     13. MODAL MATERIA
+     ============================================================ */
+  function buildIconPicker(selected) {
+    const wrap = document.getElementById("subject-icon-picker");
+    wrap.innerHTML = "";
+    ICON_CHOICES.forEach((icon) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "w-10 h-10 rounded-xl flex items-center justify-center transition-colors " + (icon === selected ? "bg-primary text-on-primary" : "bg-surface-container-low text-on-surface-variant");
+      b.innerHTML = `<span class="material-symbols-outlined text-[20px]">${icon}</span>`;
+      b.addEventListener("click", () => {
+        document.getElementById("subject-icon").value = icon;
+        [...wrap.children].forEach((c) => c.className = "w-10 h-10 rounded-xl flex items-center justify-center transition-colors bg-surface-container-low text-on-surface-variant");
+        b.className = "w-10 h-10 rounded-xl flex items-center justify-center transition-colors bg-primary text-on-primary";
+      });
+      wrap.appendChild(b);
+    });
+  }
+
+  function openSubjectModal(subjectId) {
+    document.getElementById("subject-form").reset();
+    const deleteBtn = document.getElementById("subject-delete-btn");
+    if (subjectId) {
+      const subject = state.subjects.find((s) => s.id === subjectId);
+      document.getElementById("subject-modal-title").textContent = "Editar materia";
+      document.getElementById("subject-id").value = subject.id;
+      document.getElementById("subject-name").value = subject.name;
+      document.getElementById("subject-professor").value = subject.professor || "";
+      document.getElementById("subject-room").value = subject.room || "";
+      document.getElementById("subject-icon").value = subject.icon || "menu_book";
+      buildIconPicker(subject.icon || "menu_book");
+      deleteBtn.classList.remove("hidden");
+      deleteBtn.onclick = () => {
+        const count = state.tasks.filter((t) => t.subjectId === subject.id).length;
+        confirmDialog(`¿Eliminar "${subject.name}"? ${count ? `Sus ${count} tarea(s) quedarán sin materia asignada.` : ""}`, async () => {
+          await supabase.from("tasks").update({ subject_id: null }).eq("subject_id", subject.id);
+          const { error } = await supabase.from("subjects").delete().eq("id", subject.id);
+          if (error) { showToast("No se pudo eliminar ❌"); return; }
+          state.tasks.forEach((t) => { if (t.subjectId === subject.id) t.subjectId = null; });
+          state.subjects = state.subjects.filter((s) => s.id !== subject.id);
+          closeModal("modal-subject");
+          renderAll();
+          showToast("Materia eliminada");
+        });
+      };
+    } else {
+      document.getElementById("subject-modal-title").textContent = "Nueva materia";
+      document.getElementById("subject-id").value = "";
+      document.getElementById("subject-icon").value = "menu_book";
+      buildIconPicker("menu_book");
+      deleteBtn.classList.add("hidden");
+    }
+    openModal("modal-subject");
+  }
+
+  document.getElementById("btn-add-subject").addEventListener("click", () => openSubjectModal(null));
+
+  document.getElementById("subject-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const idVal = document.getElementById("subject-id").value;
+    const formSubject = {
+      name: document.getElementById("subject-name").value.trim(),
+      professor: document.getElementById("subject-professor").value.trim(),
+      room: document.getElementById("subject-room").value.trim(),
+      icon: document.getElementById("subject-icon").value || "menu_book",
+    };
+    if (!formSubject.name) return;
+    if (idVal) {
+      const { data, error } = await supabase.from("subjects").update(subjectToDb(formSubject)).eq("id", Number(idVal)).select().single();
+      if (error) { showToast("No se pudo actualizar ❌"); return; }
+      const updated = subjectFromDb(data);
+      const idx = state.subjects.findIndex((s) => s.id === updated.id);
+      if (idx >= 0) state.subjects[idx] = updated;
+    } else {
+      const dbRow = subjectToDb(formSubject);
+      dbRow.user_id = currentUser.id;
+      const { data, error } = await supabase.from("subjects").insert(dbRow).select().single();
+      if (error) { showToast("No se pudo crear la materia ❌"); return; }
+      state.subjects.push(subjectFromDb(data));
+    }
+    closeModal("modal-subject");
+    renderAll();
+    showToast(idVal ? "Materia actualizada ✏️" : "Materia creada 🎉");
+  });
+
+  /* ============================================================
+     14. NOTIFICACIONES
+     ============================================================ */
+  function computeNotifications() {
+    const notifs = [];
+    if (state.settings.notifOverdue !== false) {
+      state.tasks.filter((t) => isOverdue(t)).forEach((t) => notifs.push({ icon: "warning", color: "#ba1a1a", bg: "#ffdad6", title: "Tarea vencida", text: t.title, task: t }));
+    }
+    if (state.settings.notifDueSoon !== false) {
+      state.tasks.filter((t) => !t.completed && isDueToday(t)).forEach((t) => notifs.push({ icon: "today", color: "#3525cd", bg: "#e2dfff", title: "Vence hoy", text: t.title + (t.dueTime ? " · " + friendlyTime(t.dueTime) : ""), task: t }));
+    }
+    return notifs;
+  }
+  function renderNotifBadge() {
+    const notifs = computeNotifications();
+    const badge = document.getElementById("notif-badge");
+    if (notifs.length > 0) { badge.textContent = notifs.length; badge.classList.remove("hidden"); }
+    else badge.classList.add("hidden");
+  }
+  function renderNotifsPanel() {
+    const notifs = computeNotifications();
+    const listEl = document.getElementById("notifs-list");
+    const emptyEl = document.getElementById("notifs-empty");
+    listEl.innerHTML = "";
+    if (notifs.length === 0) { emptyEl.classList.remove("hidden"); return; }
+    emptyEl.classList.add("hidden");
+    notifs.forEach((n) => {
+      const el = document.createElement("div");
+      el.className = "flex items-start gap-space-sm bg-surface-container-low rounded-xl p-space-sm cursor-pointer hover:bg-surface-container transition-colors";
+      el.innerHTML = `
+        <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style="background:${n.bg};color:${n.color}">
+          <span class="material-symbols-outlined text-[18px]">${n.icon}</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="font-label-lg text-label-lg text-on-surface">${n.title}</p>
+          <p class="font-body-sm text-body-sm text-on-surface-variant truncate">${escapeHtml(n.text)}</p>
+        </div>`;
+      el.addEventListener("click", () => { closeModal("modal-notifs"); switchView("tareas"); openTaskModal(n.task.id); });
+      listEl.appendChild(el);
+    });
+  }
+  document.getElementById("btn-open-notifs").addEventListener("click", () => { renderNotifsPanel(); openModal("modal-notifs"); });
+
+  /* ============================================================
+     15. DOCK FLOTANTE (QUICK ADD)
+     ============================================================ */
+  async function quickAdd() {
+    const input = document.getElementById("quick-add-input");
+    const title = input.value.trim();
+    if (!title) return;
+    const dbRow = { user_id: currentUser.id, title, description: "", subject_id: null, priority: "media", due_date: todayISO(), due_time: "", completed: false, pinned: false };
+    const { data, error } = await supabase.from("tasks").insert(dbRow).select().single();
+    if (error) { showToast("No se pudo guardar ❌"); return; }
+    state.tasks.push(taskFromDb(data));
+    input.value = "";
+    renderAll();
+    showToast("Tarea rápida añadida ⚡");
+  }
+  document.getElementById("quick-add-btn").addEventListener("click", quickAdd);
+  document.getElementById("quick-add-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); quickAdd(); } });
+
+  /* ============================================================
+     16. AUTENTICACIÓN (login / registro / sesión)
+     ============================================================ */
+  let authMode = "login";
+  function setAuthTab(mode) {
+    authMode = mode;
+    document.getElementById("auth-tab-login").classList.toggle("active", mode === "login");
+    document.getElementById("auth-tab-signup").classList.toggle("active", mode === "signup");
+    document.getElementById("auth-submit-label").textContent = mode === "login" ? "Entrar" : "Crear cuenta";
+    document.getElementById("auth-error").classList.add("hidden");
+    document.getElementById("auth-info").classList.add("hidden");
+  }
+  document.getElementById("auth-tab-login").addEventListener("click", () => setAuthTab("login"));
+  document.getElementById("auth-tab-signup").addEventListener("click", () => setAuthTab("signup"));
+
+  function showAuthError(msg) {
+    const el = document.getElementById("auth-error");
+    el.textContent = msg; el.classList.remove("hidden");
+    document.getElementById("auth-info").classList.add("hidden");
+  }
+  function showAuthInfo(msg) {
+    const el = document.getElementById("auth-info");
+    el.textContent = msg; el.classList.remove("hidden");
+    document.getElementById("auth-error").classList.add("hidden");
+  }
+  function setAuthLoading(loading) {
+    document.getElementById("auth-spinner").classList.toggle("hidden", !loading);
+    document.getElementById("auth-submit-btn").disabled = loading;
+  }
+
+  document.getElementById("auth-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!CONFIG_OK) return;
+    const email = document.getElementById("auth-email").value.trim();
+    const password = document.getElementById("auth-password").value;
+    setAuthLoading(true);
+    try {
+      if (authMode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) showAuthError(error.message);
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) { showAuthError(error.message); }
+        else if (data.session) { /* onAuthStateChange se encarga */ }
+        else showAuthInfo("Cuenta creada. Revisa tu correo para confirmar antes de entrar.");
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  });
+
+  function showAuthScreen() { document.getElementById("auth-screen").style.display = "flex"; }
+  function hideAuthScreen() { document.getElementById("auth-screen").style.display = "none"; }
+
+  /* ============================================================
+     17. INICIALIZACIÓN
+     ============================================================ */
+  async function init() {
+    setAuthTab("login");
+    if (!CONFIG_OK) {
+      document.getElementById("auth-config-warning").classList.remove("hidden");
+      document.getElementById("auth-submit-btn").disabled = true;
+      return;
+    }
+    await openAuthDb();
+
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session && session.user) {
+        currentUser = session.user;
+        hideAuthScreen();
+        await loadAll();
+        await seedIfEmpty();
+        switchView(state.activeView || "tareas");
+      } else {
+        currentUser = null;
+        showAuthScreen();
+      }
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
