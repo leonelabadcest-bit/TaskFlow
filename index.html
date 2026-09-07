@@ -135,7 +135,14 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
       </div>
       <div class="flex flex-col">
         <span class="font-headline-sm text-headline-sm text-on-surface tracking-tight leading-none">TaskFlow</span>
+      <div class="flex items-center gap-1">
         <span class="font-label-sm text-label-sm text-on-surface-variant" id="header-subtitle">Tareas</span>
+        <span class="text-on-surface-variant text-[10px]">·</span>
+        <span class="flex items-center gap-1" id="sync-indicator">
+          <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" id="sync-dot" style="background:#10b981"></span>
+          <span class="font-label-sm text-[10px] text-on-surface-variant" id="sync-text">Sincronizado</span>
+        </span>
+      </div>
       </div>
     </div>
     <div class="flex items-center gap-space-xs">
@@ -275,9 +282,16 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
     </div>
     <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-space-sm">
       <p class="font-body-sm text-body-sm text-on-surface-variant">
-        Tus datos viven en Supabase (Postgres en la nube), no en este dispositivo. Puedes cerrar sesión
-        y volver a entrar desde cualquier navegador o equipo con tu mismo correo.
+        Tus datos viven en Supabase (Postgres en la nube), pero también se guardan en este dispositivo,
+        así que puedes seguir usando la app sin internet: tus cambios se sincronizan solos en cuanto vuelva la conexión.
       </p>
+      <div class="flex items-center justify-between py-1 border-t border-outline-variant/30 pt-2">
+        <span class="font-label-md text-label-md text-on-surface-variant">Cambios pendientes por subir</span>
+        <span class="font-label-lg text-label-lg text-on-surface font-bold" id="stat-pending">0</span>
+      </div>
+      <button id="btn-sync-now" class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md active:scale-95 transition-transform">
+        <span class="material-symbols-outlined text-[18px]">sync</span> Sincronizar ahora
+      </button>
       <button id="btn-signout" class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md active:scale-95 transition-transform">
         <span class="material-symbols-outlined text-[18px]">logout</span> Cerrar sesión
       </button>
@@ -527,108 +541,162 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   "use strict";
 
   /* ============================================================
-     1. CLIENTE DE SUPABASE + ALMACENAMIENTO DE SESIÓN (IndexedDB)
-     ============================================================
-     Nota: usamos IndexedDB (no localStorage) solo para que el SDK
-     de Supabase guarde el token de sesión, así el login persiste
-     entre recargas sin depender de localStorage. */
-
-  const AUTH_DB_NAME = "taskflow_auth_kv";
-  let authDb = null;
-  function openAuthDb() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(AUTH_DB_NAME, 1);
-      req.onupgradeneeded = (e) => { e.target.result.createObjectStore("kv", { keyPath: "key" }); };
-      req.onsuccess = (e) => { authDb = e.target.result; resolve(authDb); };
-      req.onerror = (e) => reject(e.target.error);
-    });
-  }
-  const idbAuthStorage = {
-    async getItem(key) {
-      if (!authDb) await openAuthDb();
-      return new Promise((resolve) => {
-        const req = authDb.transaction("kv", "readonly").objectStore("kv").get(key);
-        req.onsuccess = () => resolve(req.result ? req.result.value : null);
-        req.onerror = () => resolve(null);
-      });
-    },
-    async setItem(key, value) {
-      if (!authDb) await openAuthDb();
-      return new Promise((resolve) => {
-        const req = authDb.transaction("kv", "readwrite").objectStore("kv").put({ key, value });
-        req.onsuccess = () => resolve();
-        req.onerror = () => resolve();
-      });
-    },
-    async removeItem(key) {
-      if (!authDb) await openAuthDb();
-      return new Promise((resolve) => {
-        const req = authDb.transaction("kv", "readwrite").objectStore("kv").delete(key);
-        req.onsuccess = () => resolve();
-        req.onerror = () => resolve();
-      });
-    },
-  };
-
+     1. CLIENTE DE SUPABASE
+     ============================================================ */
   const CONFIG_OK = window.SUPABASE_URL && window.SUPABASE_ANON_KEY &&
     !window.SUPABASE_URL.includes("TU_SUPABASE") && !window.SUPABASE_ANON_KEY.includes("TU_SUPABASE");
 
   let supabase = null;
+  let currentUser = null;
+
+  /* ============================================================
+     2. BASE DE DATOS LOCAL (IndexedDB): sesión + caché + cola offline
+     ============================================================
+     - "kv"      -> guarda el token de sesión (para no depender de localStorage)
+     - "subjects_cache" / "tasks_cache" / "profile_cache" -> espejo local de tus datos
+     - "outbox"  -> cambios pendientes por subir cuando no hay internet */
+  const LOCAL_DB_NAME = "taskflow_local_db";
+  let localDb = null;
+
+  function openLocalDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(LOCAL_DB_NAME, 1);
+      req.onupgradeneeded = (e) => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv", { keyPath: "key" });
+        if (!d.objectStoreNames.contains("subjects_cache")) d.createObjectStore("subjects_cache", { keyPath: "id" });
+        if (!d.objectStoreNames.contains("tasks_cache")) d.createObjectStore("tasks_cache", { keyPath: "id" });
+        if (!d.objectStoreNames.contains("profile_cache")) d.createObjectStore("profile_cache", { keyPath: "user_id" });
+        if (!d.objectStoreNames.contains("outbox")) d.createObjectStore("outbox", { keyPath: "key" });
+      };
+      req.onsuccess = (e) => { localDb = e.target.result; resolve(localDb); };
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+  function idbTx(store, mode) { return localDb.transaction(store, mode).objectStore(store); }
+  function idbAll(store) { return new Promise((res) => { const r = idbTx(store, "readonly").getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => res([]); }); }
+  function idbPut(store, val) { return new Promise((res) => { const r = idbTx(store, "readwrite").put(val); r.onsuccess = () => res(); r.onerror = () => res(); }); }
+  function idbDelete(store, key) { return new Promise((res) => { const r = idbTx(store, "readwrite").delete(key); r.onsuccess = () => res(); r.onerror = () => res(); }); }
+  function idbClear(store) { return new Promise((res) => { const r = idbTx(store, "readwrite").clear(); r.onsuccess = () => res(); r.onerror = () => res(); }); }
+
+  // Adaptador de almacenamiento de sesión de Supabase, usando IndexedDB en vez de localStorage
+  const idbAuthStorage = {
+    async getItem(key) { if (!localDb) await openLocalDb(); return new Promise((res) => { const r = idbTx("kv", "readonly").get(key); r.onsuccess = () => res(r.result ? r.result.value : null); r.onerror = () => res(null); }); },
+    async setItem(key, value) { if (!localDb) await openLocalDb(); return idbPut("kv", { key, value }); },
+    async removeItem(key) { if (!localDb) await openLocalDb(); return idbDelete("kv", key); },
+  };
+
   if (CONFIG_OK) {
     supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
       auth: { storage: idbAuthStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     });
   }
 
-  let currentUser = null;
+  /* ============================================================
+     3. COLA DE SINCRONIZACIÓN (OUTBOX)
+     ============================================================
+     Cada entidad (tarea o materia) solo puede tener UNA operación pendiente
+     a la vez: la más reciente gana (se sobrescribe por su misma "key"). */
+  let isOnline = navigator.onLine;
+  let isFlushing = false;
+
+  function outboxKey(table, id) { return `${table}:${id}`; }
+
+  async function queueMutation(table, id, op, dbRow) {
+    await idbPut("outbox", { key: outboxKey(table, id), table, id, op, dbRow, ts: Date.now() });
+    await refreshPendingUi();
+    if (isOnline) flushOutbox();
+  }
+
+  async function flushOutbox() {
+    if (isFlushing || !CONFIG_OK || !currentUser) return;
+    isFlushing = true;
+    setSyncUi("syncing");
+    try {
+      let pending = await idbAll("outbox");
+      pending.sort((a, b) => a.ts - b.ts);
+      for (const item of pending) {
+        try {
+          if (item.op === "delete") {
+            const { error } = await supabase.from(item.table).delete().eq("id", item.id);
+            if (error) throw error;
+          } else {
+            const row = Object.assign({}, item.dbRow, { id: item.id, user_id: currentUser.id });
+            const { error } = await supabase.from(item.table).upsert(row);
+            if (error) throw error;
+          }
+          await idbDelete("outbox", item.key);
+        } catch (err) {
+          // Seguimos sin internet o hay un error real; paramos y reintentamos más tarde.
+          console.warn("No se pudo sincronizar todavía:", err.message || err);
+          break;
+        }
+      }
+    } finally {
+      isFlushing = false;
+      await refreshPendingUi();
+    }
+  }
+
+  async function refreshPendingUi() {
+    const pending = await idbAll("outbox");
+    const count = pending.length;
+    const statEl = document.getElementById("stat-pending");
+    if (statEl) statEl.textContent = count;
+    if (!isOnline) setSyncUi("offline", count);
+    else if (isFlushing) setSyncUi("syncing");
+    else setSyncUi(count > 0 ? "pending" : "synced", count);
+  }
+
+  function setSyncUi(mode, count) {
+    const dot = document.getElementById("sync-dot");
+    const text = document.getElementById("sync-text");
+    if (!dot || !text) return;
+    if (mode === "offline") { dot.style.background = "#ba1a1a"; text.textContent = count ? `Sin conexión · ${count} pendiente${count === 1 ? "" : "s"}` : "Sin conexión"; }
+    else if (mode === "syncing") { dot.style.background = "#f59e0b"; text.textContent = "Sincronizando…"; }
+    else if (mode === "pending") { dot.style.background = "#f59e0b"; text.textContent = `${count} cambio${count === 1 ? "" : "s"} por subir`; }
+    else { dot.style.background = "#10b981"; text.textContent = "Sincronizado"; }
+  }
+
+  window.addEventListener("online", async () => {
+    isOnline = true;
+    showToast("Conexión recuperada, sincronizando ⚡");
+    await flushOutbox();
+    try { await loadAll(); renderAll(); } catch (e) { /* seguimos con lo que había en caché */ }
+  });
+  window.addEventListener("offline", () => {
+    isOnline = false;
+    showToast("Sin conexión: tus cambios se guardan en este dispositivo 💾");
+    refreshPendingUi();
+  });
 
   /* ============================================================
-     2. MAPEO ENTRE FILAS DE POSTGRES (snake_case) Y EL MODELO DE LA APP
+     4. MAPEO ENTRE FILAS DE POSTGRES (snake_case) Y EL MODELO DE LA APP
      ============================================================ */
   function taskFromDb(row) {
-    return {
-      id: row.id, title: row.title, description: row.description || "",
-      subjectId: row.subject_id, priority: row.priority || "media",
-      dueDate: row.due_date, dueTime: row.due_time || "",
-      completed: !!row.completed, pinned: !!row.pinned,
-    };
+    return { id: row.id, title: row.title, description: row.description || "", subjectId: row.subject_id, priority: row.priority || "media", dueDate: row.due_date, dueTime: row.due_time || "", completed: !!row.completed, pinned: !!row.pinned };
   }
   function taskToDb(t) {
-    return {
-      title: t.title, description: t.description || "", subject_id: t.subjectId ?? null,
-      priority: t.priority || "media", due_date: t.dueDate || null, due_time: t.dueTime || "",
-      completed: !!t.completed, pinned: !!t.pinned,
-    };
+    return { title: t.title, description: t.description || "", subject_id: t.subjectId ?? null, priority: t.priority || "media", due_date: t.dueDate || null, due_time: t.dueTime || "", completed: !!t.completed, pinned: !!t.pinned };
   }
-  function subjectFromDb(row) {
-    return { id: row.id, name: row.name, professor: row.professor || "", room: row.room || "", icon: row.icon || "menu_book" };
-  }
-  function subjectToDb(s) {
-    return { name: s.name, professor: s.professor || "", room: s.room || "", icon: s.icon || "menu_book" };
-  }
+  function subjectFromDb(row) { return { id: row.id, name: row.name, professor: row.professor || "", room: row.room || "", icon: row.icon || "menu_book" }; }
+  function subjectToDb(s) { return { name: s.name, professor: s.professor || "", room: s.room || "", icon: s.icon || "menu_book" }; }
+  function uuid() { return (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2)); }
 
   /* ============================================================
-     3. ESTADO EN MEMORIA
+     5. ESTADO EN MEMORIA
      ============================================================ */
   const state = {
-    subjects: [],
-    tasks: [],
+    subjects: [], tasks: [],
     settings: { name: "Usuario", widgetEnabled: true, notifOverdue: true, notifDueSoon: true },
-    activeView: "tareas",
-    activeFilter: "todas",
-    calCursor: new Date(),
-    calSelected: todayISO(),
+    activeView: "tareas", activeFilter: "todas", calCursor: new Date(), calSelected: todayISO(),
   };
 
   const SUBJECT_PALETTE = [
-    { bg: "#eef2ff", text: "#4338ca", dot: "#6366f1" },
-    { bg: "#ecfdf5", text: "#047857", dot: "#10b981" },
-    { bg: "#fff1e9", text: "#9d4300", dot: "#fd761a" },
-    { bg: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
-    { bg: "#eff6ff", text: "#1d4ed8", dot: "#3b82f6" },
-    { bg: "#fdf2f8", text: "#9d174d", dot: "#ec4899" },
-    { bg: "#f0fdfa", text: "#0f766e", dot: "#14b8a6" },
-    { bg: "#f5f3ff", text: "#6d28d9", dot: "#8b5cf6" },
+    { bg: "#eef2ff", text: "#4338ca", dot: "#6366f1" }, { bg: "#ecfdf5", text: "#047857", dot: "#10b981" },
+    { bg: "#fff1e9", text: "#9d4300", dot: "#fd761a" }, { bg: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
+    { bg: "#eff6ff", text: "#1d4ed8", dot: "#3b82f6" }, { bg: "#fdf2f8", text: "#9d174d", dot: "#ec4899" },
+    { bg: "#f0fdfa", text: "#0f766e", dot: "#14b8a6" }, { bg: "#f5f3ff", text: "#6d28d9", dot: "#8b5cf6" },
   ];
   const ICON_CHOICES = ["menu_book","functions","science","history_edu","palette","sports_soccer","computer","biotech","public","calculate","language","music_note"];
   const PRIORITY_META = {
@@ -644,7 +712,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   function subjectById(id) { return state.subjects.find((s) => s.id === id); }
 
   /* ============================================================
-     4. UTILIDADES DE FECHA
+     6. UTILIDADES DE FECHA
      ============================================================ */
   function todayISO() { const d = new Date(); d.setHours(0,0,0,0); return dateToISO(d); }
   function dateToISO(d) { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; }
@@ -671,36 +739,53 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   }
 
   /* ============================================================
-     5. CARGA / GUARDADO CONTRA SUPABASE
+     7. CARGA DE DATOS: RED (si hay) CON RESPALDO EN CACHÉ LOCAL
      ============================================================ */
   async function loadAll() {
-    const [{ data: subjRows, error: subjErr }, { data: taskRows, error: taskErr }] = await Promise.all([
-      supabase.from("subjects").select("*").order("id"),
-      supabase.from("tasks").select("*").order("id"),
-    ]);
-    if (subjErr) console.error(subjErr);
-    if (taskErr) console.error(taskErr);
-    state.subjects = (subjRows || []).map(subjectFromDb);
-    state.tasks = (taskRows || []).map(taskFromDb);
-    await loadProfile();
+    if (isOnline) {
+      try {
+        const [{ data: subjRows, error: e1 }, { data: taskRows, error: e2 }] = await Promise.all([
+          supabase.from("subjects").select("*").order("created_at"),
+          supabase.from("tasks").select("*").order("created_at"),
+        ]);
+        if (e1 || e2) throw (e1 || e2);
+        state.subjects = (subjRows || []).map(subjectFromDb);
+        state.tasks = (taskRows || []).map(taskFromDb);
+        await idbClear("subjects_cache");
+        await idbClear("tasks_cache");
+        for (const s of subjRows || []) await idbPut("subjects_cache", s);
+        for (const t of taskRows || []) await idbPut("tasks_cache", t);
+        await loadProfile();
+        return;
+      } catch (e) {
+        console.warn("Sin red o error consultando Supabase, uso caché local:", e);
+      }
+    }
+    await loadFromCache();
+  }
+
+  async function loadFromCache() {
+    const subjRows = await idbAll("subjects_cache");
+    const taskRows = await idbAll("tasks_cache");
+    state.subjects = subjRows.map(subjectFromDb);
+    state.tasks = taskRows.map(taskFromDb);
+    const profileRows = await idbAll("profile_cache");
+    const profile = profileRows.find((p) => p.user_id === currentUser.id);
+    if (profile) {
+      state.settings = { name: profile.name || "Usuario", widgetEnabled: profile.widget_enabled !== false, notifOverdue: profile.notif_overdue !== false, notifDueSoon: profile.notif_due_soon !== false };
+    }
   }
 
   async function loadProfile() {
-    let { data, error } = await supabase.from("profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
+    let { data } = await supabase.from("profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
     if (!data) {
       const defaultName = (currentUser.email || "Usuario").split("@")[0];
-      const insertRes = await supabase.from("profiles").insert({
-        user_id: currentUser.id, name: defaultName, widget_enabled: true, notif_overdue: true, notif_due_soon: true,
-      }).select().single();
+      const insertRes = await supabase.from("profiles").insert({ user_id: currentUser.id, name: defaultName, widget_enabled: true, notif_overdue: true, notif_due_soon: true }).select().single();
       data = insertRes.data;
     }
     if (data) {
-      state.settings = {
-        name: data.name || "Usuario",
-        widgetEnabled: data.widget_enabled !== false,
-        notifOverdue: data.notif_overdue !== false,
-        notifDueSoon: data.notif_due_soon !== false,
-      };
+      state.settings = { name: data.name || "Usuario", widgetEnabled: data.widget_enabled !== false, notifOverdue: data.notif_overdue !== false, notifDueSoon: data.notif_due_soon !== false };
+      await idbPut("profile_cache", data);
     }
   }
 
@@ -711,30 +796,71 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
     if ("widgetEnabled" in patch) dbPatch.widget_enabled = patch.widgetEnabled;
     if ("notifOverdue" in patch) dbPatch.notif_overdue = patch.notifOverdue;
     if ("notifDueSoon" in patch) dbPatch.notif_due_soon = patch.notifDueSoon;
-    await supabase.from("profiles").update(dbPatch).eq("user_id", currentUser.id);
+    const cached = (await idbAll("profile_cache")).find((p) => p.user_id === currentUser.id) || { user_id: currentUser.id };
+    const merged = Object.assign({}, cached, dbPatch);
+    await idbPut("profile_cache", merged);
+    if (isOnline) {
+      const { error } = await supabase.from("profiles").update(dbPatch).eq("user_id", currentUser.id);
+      if (error) console.warn(error);
+    } else {
+      showToast("Guardado localmente, se sincronizará luego 💾");
+    }
   }
 
   async function seedIfEmpty() {
-    if (state.subjects.length > 0) return;
+    if (state.subjects.length > 0 || !isOnline) return;
     const uid = currentUser.id;
-    const { data: s1 } = await supabase.from("subjects").insert({ user_id: uid, name: "Matemáticas", professor: "Dr. Ramírez", room: "Aula B-204", icon: "calculate" }).select().single();
-    const { data: s2 } = await supabase.from("subjects").insert({ user_id: uid, name: "Historia", professor: "Lic. Torres", room: "Aula A-101", icon: "history_edu" }).select().single();
-    const { data: s3 } = await supabase.from("subjects").insert({ user_id: uid, name: "Personal", professor: "", room: "", icon: "self_improvement" }).select().single();
+    const s1 = { id: uuid(), user_id: uid, name: "Matemáticas", professor: "Dr. Ramírez", room: "Aula B-204", icon: "calculate" };
+    const s2 = { id: uuid(), user_id: uid, name: "Historia", professor: "Lic. Torres", room: "Aula A-101", icon: "history_edu" };
+    const s3 = { id: uuid(), user_id: uid, name: "Personal", professor: "", room: "", icon: "self_improvement" };
+    await supabase.from("subjects").insert([s1, s2, s3]);
     const t = todayISO();
     const tomorrow = dateToISO(new Date(Date.now() + 86400000));
     const yesterday = dateToISO(new Date(Date.now() - 86400000));
     await supabase.from("tasks").insert([
-      { user_id: uid, title: "Comprar juego geométrico", description: "Regla, escuadra y compás de precisión para el taller práctico.", subject_id: s1.id, priority: "alta", due_date: t, due_time: "10:00", completed: false, pinned: true },
-      { user_id: uid, title: "Entregar ejercicios de álgebra", description: "Capítulo 4, ejercicios 1 al 20.", subject_id: s1.id, priority: "media", due_date: t, due_time: "13:00", completed: false, pinned: false },
-      { user_id: uid, title: "Leer capítulo sobre la Revolución Francesa", description: "", subject_id: s2.id, priority: "media", due_date: tomorrow, due_time: "", completed: false, pinned: false },
-      { user_id: uid, title: "Llamar al dentista", description: "", subject_id: s3.id, priority: "baja", due_date: yesterday, due_time: "", completed: false, pinned: false },
-      { user_id: uid, title: "Ensayo de historia entregado", description: "", subject_id: s2.id, priority: "baja", due_date: yesterday, due_time: "", completed: true, pinned: false },
+      { id: uuid(), user_id: uid, title: "Comprar juego geométrico", description: "Regla, escuadra y compás de precisión para el taller práctico.", subject_id: s1.id, priority: "alta", due_date: t, due_time: "10:00", completed: false, pinned: true },
+      { id: uuid(), user_id: uid, title: "Entregar ejercicios de álgebra", description: "Capítulo 4, ejercicios 1 al 20.", subject_id: s1.id, priority: "media", due_date: t, due_time: "13:00", completed: false, pinned: false },
+      { id: uuid(), user_id: uid, title: "Leer capítulo sobre la Revolución Francesa", description: "", subject_id: s2.id, priority: "media", due_date: tomorrow, due_time: "", completed: false, pinned: false },
+      { id: uuid(), user_id: uid, title: "Llamar al dentista", description: "", subject_id: s3.id, priority: "baja", due_date: yesterday, due_time: "", completed: false, pinned: false },
+      { id: uuid(), user_id: uid, title: "Ensayo de historia entregado", description: "", subject_id: s2.id, priority: "baja", due_date: yesterday, due_time: "", completed: true, pinned: false },
     ]);
     await loadAll();
   }
 
   /* ============================================================
-     6. NAVEGACIÓN Y RENDER GENERAL
+     8. ESCRITURAS LOCAL-FIRST (funcionan con o sin internet)
+     ============================================================ */
+  async function upsertTaskLocal(task) {
+    const idx = state.tasks.findIndex((t) => t.id === task.id);
+    if (idx >= 0) state.tasks[idx] = task; else state.tasks.push(task);
+    await idbPut("tasks_cache", Object.assign({ id: task.id, user_id: currentUser.id }, taskToDb(task)));
+    await queueMutation("tasks", task.id, "upsert", taskToDb(task));
+  }
+  async function deleteTaskLocal(id) {
+    state.tasks = state.tasks.filter((t) => t.id !== id);
+    await idbDelete("tasks_cache", id);
+    await queueMutation("tasks", id, "delete", null);
+  }
+  async function upsertSubjectLocal(subject) {
+    const idx = state.subjects.findIndex((s) => s.id === subject.id);
+    if (idx >= 0) state.subjects[idx] = subject; else state.subjects.push(subject);
+    await idbPut("subjects_cache", Object.assign({ id: subject.id, user_id: currentUser.id }, subjectToDb(subject)));
+    await queueMutation("subjects", subject.id, "upsert", subjectToDb(subject));
+  }
+  async function deleteSubjectLocal(id) {
+    // Las tareas de esta materia quedan sin materia asignada (igual que en línea).
+    for (const t of state.tasks.filter((t) => t.subjectId === id)) {
+      t.subjectId = null;
+      await idbPut("tasks_cache", Object.assign({ id: t.id, user_id: currentUser.id }, taskToDb(t)));
+      await queueMutation("tasks", t.id, "upsert", taskToDb(t));
+    }
+    state.subjects = state.subjects.filter((s) => s.id !== id);
+    await idbDelete("subjects_cache", id);
+    await queueMutation("subjects", id, "delete", null);
+  }
+
+  /* ============================================================
+     9. NAVEGACIÓN Y RENDER GENERAL
      ============================================================ */
   function switchView(name) {
     state.activeView = name;
@@ -762,24 +888,22 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
     renderCalendar();
     renderAjustes();
     renderNotifBadge();
+    refreshPendingUi();
   }
 
   /* ============================================================
-     7. VISTA: TAREAS
+     10. VISTA: TAREAS
      ============================================================ */
   function renderGreetingAndFilters() {
     document.getElementById("greeting-text").textContent = `¡Hola, ${state.settings.name || "Usuario"}! 👋`;
     document.getElementById("profile-initial").textContent = (state.settings.name || "U").charAt(0).toUpperCase();
     document.getElementById("ajustes-avatar").textContent = (state.settings.name || "U").charAt(0).toUpperCase();
-
     const pendingTotal = state.tasks.filter((t) => !t.completed).length;
     document.getElementById("pending-count-text").innerHTML = `Tienes <span class="font-headline-sm text-headline-sm text-primary">${pendingTotal} tarea${pendingTotal === 1 ? "" : "s"}</span> pendientes`;
-
     const todays = state.tasks.filter((t) => t.dueDate === todayISO());
     const doneToday = todays.filter((t) => t.completed).length;
     const pct = todays.length ? Math.round((doneToday / todays.length) * 100) : 0;
     document.getElementById("progress-pct").textContent = pct + "%";
-
     const wrap = document.getElementById("filter-pills");
     wrap.innerHTML = "";
     const allCount = state.tasks.filter((t) => !t.completed).length;
@@ -804,10 +928,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
 
   function visibleTasks() {
     let list = state.tasks.slice();
-    if (state.activeFilter !== "todas") {
-      const sid = Number(state.activeFilter);
-      list = list.filter((t) => t.subjectId === sid);
-    }
+    if (state.activeFilter !== "todas") list = list.filter((t) => t.subjectId === state.activeFilter);
     list.sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1;
       const ao = isOverdue(a), bo = isOverdue(b);
@@ -896,13 +1017,12 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
     if (!task) return;
     task.completed = !task.completed;
     renderAll();
-    const { error } = await supabase.from("tasks").update({ completed: task.completed }).eq("id", id);
-    if (error) { console.error(error); showToast("No se pudo sincronizar ❌"); }
-    else showToast(task.completed ? "Tarea completada ✅" : "Tarea marcada como pendiente");
+    await upsertTaskLocal(task);
+    showToast(task.completed ? "Tarea completada ✅" : "Tarea marcada como pendiente");
   }
 
   /* ============================================================
-     8. VISTA: MATERIAS
+     11. VISTA: MATERIAS
      ============================================================ */
   function renderSubjects() {
     const listEl = document.getElementById("subjects-list");
@@ -952,7 +1072,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   }
 
   /* ============================================================
-     9. VISTA: CALENDARIO
+     12. VISTA: CALENDARIO
      ============================================================ */
   function renderCalendar() {
     const cursor = state.calCursor;
@@ -999,22 +1119,12 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
     dayTasks.forEach((task) => listEl.appendChild(taskCard(task)));
   }
 
-  document.getElementById("cal-prev-month").addEventListener("click", () => {
-    state.calCursor = new Date(state.calCursor.getFullYear(), state.calCursor.getMonth() - 1, 1);
-    renderCalendar();
-  });
-  document.getElementById("cal-next-month").addEventListener("click", () => {
-    state.calCursor = new Date(state.calCursor.getFullYear(), state.calCursor.getMonth() + 1, 1);
-    renderCalendar();
-  });
-  document.getElementById("cal-today-btn").addEventListener("click", () => {
-    state.calCursor = new Date();
-    state.calSelected = todayISO();
-    renderCalendar();
-  });
+  document.getElementById("cal-prev-month").addEventListener("click", () => { state.calCursor = new Date(state.calCursor.getFullYear(), state.calCursor.getMonth() - 1, 1); renderCalendar(); });
+  document.getElementById("cal-next-month").addEventListener("click", () => { state.calCursor = new Date(state.calCursor.getFullYear(), state.calCursor.getMonth() + 1, 1); renderCalendar(); });
+  document.getElementById("cal-today-btn").addEventListener("click", () => { state.calCursor = new Date(); state.calSelected = todayISO(); renderCalendar(); });
 
   /* ============================================================
-     10. VISTA: AJUSTES
+     13. VISTA: AJUSTES
      ============================================================ */
   function renderAjustes() {
     document.getElementById("settings-name").value = state.settings.name || "Usuario";
@@ -1055,13 +1165,20 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   });
 
   document.getElementById("btn-reset-data").addEventListener("click", () => {
-    confirmDialog("Esto borrará todas tus materias y tareas guardadas en Supabase. Esta acción no se puede deshacer.", async () => {
-      await supabase.from("tasks").delete().eq("user_id", currentUser.id);
-      await supabase.from("subjects").delete().eq("user_id", currentUser.id);
-      await loadAll();
+    confirmDialog("Esto borrará todas tus materias y tareas (en la nube y en este dispositivo). Esta acción no se puede deshacer.", async () => {
+      for (const t of state.tasks.slice()) await deleteTaskLocal(t.id);
+      for (const s of state.subjects.slice()) await deleteSubjectLocal(s.id);
       renderAll();
       showToast("Todos los datos fueron eliminados 🗑️");
     });
+  });
+
+  document.getElementById("btn-sync-now").addEventListener("click", async () => {
+    if (!isOnline) { showToast("Sigues sin conexión ❌"); return; }
+    await flushOutbox();
+    await loadAll();
+    renderAll();
+    showToast("Sincronizado ✅");
   });
 
   document.getElementById("btn-signout").addEventListener("click", () => {
@@ -1069,7 +1186,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   });
 
   /* ============================================================
-     11. NAV / MODALES GENÉRICOS
+     14. NAV / MODALES GENÉRICOS
      ============================================================ */
   document.querySelectorAll(".nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
   document.getElementById("btn-open-ajustes-header").addEventListener("click", () => switchView("ajustes"));
@@ -1078,21 +1195,11 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   function openModal(id) { document.getElementById(id).classList.add("active"); }
   function closeModal(id) { document.getElementById(id).classList.remove("active"); }
   document.querySelectorAll("[data-close-modal]").forEach((btn) => btn.addEventListener("click", () => closeModal(btn.dataset.closeModal)));
-  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => {
-    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.classList.remove("active"); });
-  });
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => { backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.classList.remove("active"); }); });
 
   let confirmCallback = null;
-  function confirmDialog(text, onConfirm) {
-    document.getElementById("confirm-text").textContent = text;
-    confirmCallback = onConfirm;
-    openModal("modal-confirm");
-  }
-  document.getElementById("confirm-ok").addEventListener("click", () => {
-    closeModal("modal-confirm");
-    if (confirmCallback) confirmCallback();
-    confirmCallback = null;
-  });
+  function confirmDialog(text, onConfirm) { document.getElementById("confirm-text").textContent = text; confirmCallback = onConfirm; openModal("modal-confirm"); }
+  document.getElementById("confirm-ok").addEventListener("click", () => { closeModal("modal-confirm"); if (confirmCallback) confirmCallback(); confirmCallback = null; });
   document.getElementById("confirm-cancel").addEventListener("click", () => { closeModal("modal-confirm"); confirmCallback = null; });
 
   function showToast(msg) {
@@ -1107,12 +1214,11 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   function escapeHtml(str) { const div = document.createElement("div"); div.textContent = str == null ? "" : String(str); return div.innerHTML; }
 
   /* ============================================================
-     12. MODAL TAREA
+     15. MODAL TAREA
      ============================================================ */
   function populateSubjectSelect() {
     const sel = document.getElementById("task-subject");
-    sel.innerHTML = `<option value="">General (sin materia)</option>` +
-      state.subjects.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+    sel.innerHTML = `<option value="">General (sin materia)</option>` + state.subjects.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
   }
 
   function openTaskModal(taskId) {
@@ -1134,9 +1240,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
       deleteBtn.classList.remove("hidden");
       deleteBtn.onclick = () => {
         confirmDialog("¿Eliminar esta tarea permanentemente?", async () => {
-          const { error } = await supabase.from("tasks").delete().eq("id", task.id);
-          if (error) { showToast("No se pudo eliminar ❌"); return; }
-          state.tasks = state.tasks.filter((t) => t.id !== task.id);
+          await deleteTaskLocal(task.id);
           closeModal("modal-task");
           renderAll();
           showToast("Tarea eliminada");
@@ -1156,39 +1260,28 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   document.getElementById("task-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const idVal = document.getElementById("task-id").value;
-    const formTask = {
-      title: document.getElementById("task-title").value.trim(),
+    const title = document.getElementById("task-title").value.trim();
+    if (!title) return;
+    const existing = idVal ? state.tasks.find((t) => t.id === idVal) : null;
+    const task = {
+      id: idVal || uuid(),
+      title,
       description: document.getElementById("task-desc").value.trim(),
-      subjectId: document.getElementById("task-subject").value ? Number(document.getElementById("task-subject").value) : null,
+      subjectId: document.getElementById("task-subject").value || null,
       priority: document.getElementById("task-priority").value,
       dueDate: document.getElementById("task-date").value || null,
       dueTime: document.getElementById("task-time").value || "",
       pinned: document.getElementById("task-pinned").checked,
+      completed: existing ? existing.completed : false,
     };
-    if (!formTask.title) return;
-    if (idVal) {
-      const existing = state.tasks.find((t) => t.id === Number(idVal));
-      formTask.completed = existing ? existing.completed : false;
-      const { data, error } = await supabase.from("tasks").update(taskToDb(formTask)).eq("id", Number(idVal)).select().single();
-      if (error) { showToast("No se pudo actualizar ❌"); return; }
-      const updated = taskFromDb(data);
-      const idx = state.tasks.findIndex((t) => t.id === updated.id);
-      if (idx >= 0) state.tasks[idx] = updated;
-    } else {
-      formTask.completed = false;
-      const dbRow = taskToDb(formTask);
-      dbRow.user_id = currentUser.id;
-      const { data, error } = await supabase.from("tasks").insert(dbRow).select().single();
-      if (error) { showToast("No se pudo crear la tarea ❌"); return; }
-      state.tasks.push(taskFromDb(data));
-    }
+    await upsertTaskLocal(task);
     closeModal("modal-task");
     renderAll();
     showToast(idVal ? "Tarea actualizada ✏️" : "Tarea creada 🎉");
   });
 
   /* ============================================================
-     13. MODAL MATERIA
+     16. MODAL MATERIA
      ============================================================ */
   function buildIconPicker(selected) {
     const wrap = document.getElementById("subject-icon-picker");
@@ -1223,11 +1316,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
       deleteBtn.onclick = () => {
         const count = state.tasks.filter((t) => t.subjectId === subject.id).length;
         confirmDialog(`¿Eliminar "${subject.name}"? ${count ? `Sus ${count} tarea(s) quedarán sin materia asignada.` : ""}`, async () => {
-          await supabase.from("tasks").update({ subject_id: null }).eq("subject_id", subject.id);
-          const { error } = await supabase.from("subjects").delete().eq("id", subject.id);
-          if (error) { showToast("No se pudo eliminar ❌"); return; }
-          state.tasks.forEach((t) => { if (t.subjectId === subject.id) t.subjectId = null; });
-          state.subjects = state.subjects.filter((s) => s.id !== subject.id);
+          await deleteSubjectLocal(subject.id);
           closeModal("modal-subject");
           renderAll();
           showToast("Materia eliminada");
@@ -1248,49 +1337,34 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   document.getElementById("subject-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const idVal = document.getElementById("subject-id").value;
-    const formSubject = {
-      name: document.getElementById("subject-name").value.trim(),
+    const name = document.getElementById("subject-name").value.trim();
+    if (!name) return;
+    const subject = {
+      id: idVal || uuid(),
+      name,
       professor: document.getElementById("subject-professor").value.trim(),
       room: document.getElementById("subject-room").value.trim(),
       icon: document.getElementById("subject-icon").value || "menu_book",
     };
-    if (!formSubject.name) return;
-    if (idVal) {
-      const { data, error } = await supabase.from("subjects").update(subjectToDb(formSubject)).eq("id", Number(idVal)).select().single();
-      if (error) { showToast("No se pudo actualizar ❌"); return; }
-      const updated = subjectFromDb(data);
-      const idx = state.subjects.findIndex((s) => s.id === updated.id);
-      if (idx >= 0) state.subjects[idx] = updated;
-    } else {
-      const dbRow = subjectToDb(formSubject);
-      dbRow.user_id = currentUser.id;
-      const { data, error } = await supabase.from("subjects").insert(dbRow).select().single();
-      if (error) { showToast("No se pudo crear la materia ❌"); return; }
-      state.subjects.push(subjectFromDb(data));
-    }
+    await upsertSubjectLocal(subject);
     closeModal("modal-subject");
     renderAll();
     showToast(idVal ? "Materia actualizada ✏️" : "Materia creada 🎉");
   });
 
   /* ============================================================
-     14. NOTIFICACIONES
+     17. NOTIFICACIONES
      ============================================================ */
   function computeNotifications() {
     const notifs = [];
-    if (state.settings.notifOverdue !== false) {
-      state.tasks.filter((t) => isOverdue(t)).forEach((t) => notifs.push({ icon: "warning", color: "#ba1a1a", bg: "#ffdad6", title: "Tarea vencida", text: t.title, task: t }));
-    }
-    if (state.settings.notifDueSoon !== false) {
-      state.tasks.filter((t) => !t.completed && isDueToday(t)).forEach((t) => notifs.push({ icon: "today", color: "#3525cd", bg: "#e2dfff", title: "Vence hoy", text: t.title + (t.dueTime ? " · " + friendlyTime(t.dueTime) : ""), task: t }));
-    }
+    if (state.settings.notifOverdue !== false) state.tasks.filter((t) => isOverdue(t)).forEach((t) => notifs.push({ icon: "warning", color: "#ba1a1a", bg: "#ffdad6", title: "Tarea vencida", text: t.title, task: t }));
+    if (state.settings.notifDueSoon !== false) state.tasks.filter((t) => !t.completed && isDueToday(t)).forEach((t) => notifs.push({ icon: "today", color: "#3525cd", bg: "#e2dfff", title: "Vence hoy", text: t.title + (t.dueTime ? " · " + friendlyTime(t.dueTime) : ""), task: t }));
     return notifs;
   }
   function renderNotifBadge() {
     const notifs = computeNotifications();
     const badge = document.getElementById("notif-badge");
-    if (notifs.length > 0) { badge.textContent = notifs.length; badge.classList.remove("hidden"); }
-    else badge.classList.add("hidden");
+    if (notifs.length > 0) { badge.textContent = notifs.length; badge.classList.remove("hidden"); } else badge.classList.add("hidden");
   }
   function renderNotifsPanel() {
     const notifs = computeNotifications();
@@ -1317,16 +1391,14 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   document.getElementById("btn-open-notifs").addEventListener("click", () => { renderNotifsPanel(); openModal("modal-notifs"); });
 
   /* ============================================================
-     15. DOCK FLOTANTE (QUICK ADD)
+     18. DOCK FLOTANTE (QUICK ADD)
      ============================================================ */
   async function quickAdd() {
     const input = document.getElementById("quick-add-input");
     const title = input.value.trim();
     if (!title) return;
-    const dbRow = { user_id: currentUser.id, title, description: "", subject_id: null, priority: "media", due_date: todayISO(), due_time: "", completed: false, pinned: false };
-    const { data, error } = await supabase.from("tasks").insert(dbRow).select().single();
-    if (error) { showToast("No se pudo guardar ❌"); return; }
-    state.tasks.push(taskFromDb(data));
+    const task = { id: uuid(), title, description: "", subjectId: null, priority: "media", dueDate: todayISO(), dueTime: "", completed: false, pinned: false };
+    await upsertTaskLocal(task);
     input.value = "";
     renderAll();
     showToast("Tarea rápida añadida ⚡");
@@ -1335,7 +1407,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   document.getElementById("quick-add-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); quickAdd(); } });
 
   /* ============================================================
-     16. AUTENTICACIÓN (login / registro / sesión)
+     19. AUTENTICACIÓN (login / registro / sesión)
      ============================================================ */
   let authMode = "login";
   function setAuthTab(mode) {
@@ -1349,24 +1421,14 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
   document.getElementById("auth-tab-login").addEventListener("click", () => setAuthTab("login"));
   document.getElementById("auth-tab-signup").addEventListener("click", () => setAuthTab("signup"));
 
-  function showAuthError(msg) {
-    const el = document.getElementById("auth-error");
-    el.textContent = msg; el.classList.remove("hidden");
-    document.getElementById("auth-info").classList.add("hidden");
-  }
-  function showAuthInfo(msg) {
-    const el = document.getElementById("auth-info");
-    el.textContent = msg; el.classList.remove("hidden");
-    document.getElementById("auth-error").classList.add("hidden");
-  }
-  function setAuthLoading(loading) {
-    document.getElementById("auth-spinner").classList.toggle("hidden", !loading);
-    document.getElementById("auth-submit-btn").disabled = loading;
-  }
+  function showAuthError(msg) { const el = document.getElementById("auth-error"); el.textContent = msg; el.classList.remove("hidden"); document.getElementById("auth-info").classList.add("hidden"); }
+  function showAuthInfo(msg) { const el = document.getElementById("auth-info"); el.textContent = msg; el.classList.remove("hidden"); document.getElementById("auth-error").classList.add("hidden"); }
+  function setAuthLoading(loading) { document.getElementById("auth-spinner").classList.toggle("hidden", !loading); document.getElementById("auth-submit-btn").disabled = loading; }
 
   document.getElementById("auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!CONFIG_OK) return;
+    if (!isOnline) { showAuthError("Necesitas conexión a internet para iniciar sesión la primera vez."); return; }
     const email = document.getElementById("auth-email").value.trim();
     const password = document.getElementById("auth-password").value;
     setAuthLoading(true);
@@ -1376,20 +1438,17 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
         if (error) showAuthError(error.message);
       } else {
         const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) { showAuthError(error.message); }
-        else if (data.session) { /* onAuthStateChange se encarga */ }
-        else showAuthInfo("Cuenta creada. Revisa tu correo para confirmar antes de entrar.");
+        if (error) showAuthError(error.message);
+        else if (!data.session) showAuthInfo("Cuenta creada. Revisa tu correo para confirmar antes de entrar.");
       }
-    } finally {
-      setAuthLoading(false);
-    }
+    } finally { setAuthLoading(false); }
   });
 
   function showAuthScreen() { document.getElementById("auth-screen").style.display = "flex"; }
   function hideAuthScreen() { document.getElementById("auth-screen").style.display = "none"; }
 
   /* ============================================================
-     17. INICIALIZACIÓN
+     20. INICIALIZACIÓN
      ============================================================ */
   async function init() {
     setAuthTab("login");
@@ -1398,7 +1457,8 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
       document.getElementById("auth-submit-btn").disabled = true;
       return;
     }
-    await openAuthDb();
+    await openLocalDb();
+    setSyncUi(isOnline ? "synced" : "offline");
 
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (session && session.user) {
@@ -1407,6 +1467,7 @@ fontSize: { "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015
         await loadAll();
         await seedIfEmpty();
         switchView(state.activeView || "tareas");
+        if (isOnline) flushOutbox();
       } else {
         currentUser = null;
         showAuthScreen();
